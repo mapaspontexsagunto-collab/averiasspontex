@@ -328,10 +328,6 @@
         <div class="config-card">
           <h2>Configuración</h2>
           <div class="config-item">
-            <label>Gemini API Key</label>
-            <input type="password" id="cfg-gemini" placeholder="AIza...">
-          </div>
-          <div class="config-item">
             <label>Supabase URL</label>
             <input type="text" id="cfg-supabase-url" placeholder="https://xxx.supabase.co">
           </div>
@@ -393,14 +389,12 @@ const DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzd
 
 function getCfg() {
   return {
-    gemini: localStorage.getItem('av_gemini') || '',
     url: localStorage.getItem('av_sb_url') || DEFAULT_SUPABASE_URL,
     key: localStorage.getItem('av_sb_key') || DEFAULT_SUPABASE_KEY,
   };
 }
 
 function saveConfig() {
-  localStorage.setItem('av_gemini', document.getElementById('cfg-gemini').value.trim());
   localStorage.setItem('av_sb_url', document.getElementById('cfg-supabase-url').value.trim() || DEFAULT_SUPABASE_URL);
   localStorage.setItem('av_sb_key', document.getElementById('cfg-supabase-key').value.trim() || DEFAULT_SUPABASE_KEY);
   document.getElementById('cfg-msg').classList.add('show');
@@ -410,7 +404,6 @@ function saveConfig() {
 
 function loadConfigUI() {
   const c = getCfg();
-  document.getElementById('cfg-gemini').value = c.gemini;
   document.getElementById('cfg-supabase-url').value = c.url;
   document.getElementById('cfg-supabase-key').value = c.key;
 }
@@ -727,21 +720,26 @@ function removeTyping() {
 
 async function callGemini(prompt, imageBase64, imageMime) {
   const c = getCfg();
-  if (!c.gemini) throw new Error('Configura tu Gemini API Key en la pestaña Config');
   const parts = [];
   if (imageBase64) {
     parts.push({ inline_data: { mime_type: imageMime, data: imageBase64 } });
   }
   parts.push({ text: prompt });
 
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${c.gemini}`, {
+  // Ahora la clave de Gemini vive en Supabase (secret GEMINI_API_KEY).
+  // Llamamos a la Edge Function, que hace de intermediaria.
+  const res = await fetch(`${c.url}/functions/v1/brave-search`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts }] })
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${c.key}`,
+      'apikey': c.key
+    },
+    body: JSON.stringify({ prompt, image: imageBase64 || null, imageMime: imageMime || null })
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error?.message || 'Error Gemini');
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  if (!res.ok) throw new Error(data.error || data.message || 'Error Gemini');
+  return data.text || '';
 }
 
 async function callBraveSearch(query) {
@@ -751,7 +749,8 @@ async function callBraveSearch(query) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${c.key}`
+        'Authorization': `Bearer ${c.key}`,
+        'apikey': c.key
       },
       body: JSON.stringify({ query })
     });
