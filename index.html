@@ -864,7 +864,13 @@ INSTRUCCIONES:
     if (webResults.length) {
       html += '<br><br><strong>🔗 Fuentes encontradas:</strong>';
       webResults.forEach(r => {
-        html += `<div class="web-result"><a href="${r.url}" target="_blank" rel="noopener">${r.title}</a><p>${r.description}</p></div>`;
+        let link = (r.url || r.link || '').trim();
+        // Garantizar que el enlace es absoluto (con https://). Sin esto, el
+        // navegador lo trata como ruta interna del propio sitio y da 404.
+        if (link && !/^https?:\/\//i.test(link)) link = 'https://' + link;
+        const desc = (r.description || r.snippet || r.display || '').trim();
+        if (!link) return;
+        html += `<div class="web-result"><a href="${link}" target="_blank" rel="noopener">${r.title || link}</a><p>${desc}</p></div>`;
       });
     }
 
