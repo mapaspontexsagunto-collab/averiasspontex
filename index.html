@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Averías Pontex</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#f59e0b">
@@ -50,6 +50,16 @@
   .chat-sidebar { width: 280px; border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 16px; gap: 12px; overflow-y: auto; flex-shrink: 0; }
   .sidebar-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text3); font-weight: 600; }
   .sidebar-select { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: var(--radius); font-size: 13px; width: 100%; }
+  .nueva-conv-btn { width:100%; background: var(--accent); border:none; color:#000; padding:10px; border-radius: var(--radius); font-size:13px; font-weight:700; cursor:pointer; }
+  .conv-list { margin-top:8px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; }
+  .conv-item { background: var(--surface2); border:1px solid var(--border); border-radius: var(--radius); padding:8px 10px; cursor:pointer; position:relative; }
+  .conv-item:hover { border-color: var(--accent2); }
+  .conv-item.active { border-color: var(--accent); }
+  .conv-item .conv-title { font-size:13px; color:var(--text); font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding-right:20px; }
+  .conv-item .conv-date { font-size:11px; color:var(--text3); margin-top:2px; }
+  .conv-item .conv-del { position:absolute; top:6px; right:6px; background:none; border:none; color:var(--text3); cursor:pointer; font-size:13px; line-height:1; padding:2px; }
+  .conv-item .conv-del:hover { color:var(--danger); }
+  .conv-empty { font-size:12px; color:var(--text3); padding:8px 2px; }
   .sidebar-section { display: flex; flex-direction: column; gap: 6px; }
   .config-row { display: flex; gap: 8px; flex-direction: column; }
   .cfg-label { font-size: 12px; color: var(--text2); }
@@ -62,6 +72,11 @@
   textarea { resize: vertical; min-height: 60px; }
 
   .chat-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  /* Barra superior del chat: solo se usa en móvil */
+  .chat-topbar { display: none; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+  .chat-topbar-title { font-size: 14px; font-weight: 600; color: var(--text); }
+  .chat-menu-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: var(--radius); width: 36px; height: 36px; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .conv-overlay { display: none; }
   .messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
   .msg { display: flex; gap: 12px; max-width: 90%; }
   .msg.user { align-self: flex-end; flex-direction: row-reverse; }
@@ -89,7 +104,7 @@
   .preview-img { height: 60px; border-radius: 6px; border: 1px solid var(--border); }
   .preview-remove { position: absolute; top: -6px; right: -6px; background: var(--danger); border: none; color: #fff; border-radius: 50%; width: 18px; height: 18px; cursor: pointer; font-size: 11px; display: flex; align-items: center; justify-content: center; }
   .input-row { display: flex; gap: 8px; align-items: flex-end; }
-  .input-row textarea { flex: 1; min-height: 40px; max-height: 120px; padding: 10px 12px; }
+  .input-row textarea { flex: 1; min-height: 40px; max-height: 120px; padding: 10px 12px; font-size: 16px; }
   .icon-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--text2); border-radius: var(--radius); padding: 0; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 16px; transition: all .15s; }
   .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
   .send-btn { background: var(--accent); border: none; color: #000; border-radius: var(--radius); padding: 0 18px; height: 40px; font-weight: 700; font-size: 13px; cursor: pointer; flex-shrink: 0; transition: opacity .15s; }
@@ -166,7 +181,18 @@
   .cfg-msg.show { display: block; }
 
   @media (max-width: 640px) {
-    .chat-sidebar { display: none; }
+    .chat-topbar { display: flex; }
+    /* El panel de conversaciones se desliza desde la izquierda */
+    .chat-sidebar {
+      position: fixed; top: 0; left: 0; bottom: 0; z-index: 60;
+      width: 82%; max-width: 320px;
+      transform: translateX(-100%); transition: transform .25s ease;
+      background: var(--surface); box-shadow: 2px 0 16px rgba(0,0,0,.4);
+      display: flex;
+    }
+    .chat-sidebar.open { transform: translateX(0); }
+    .conv-overlay { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 55; opacity: 0; pointer-events: none; transition: opacity .25s; }
+    .conv-overlay.open { opacity: 1; pointer-events: auto; }
     .form-grid { grid-template-columns: 1fr; }
     nav .nav-btn { padding: 6px 8px; font-size: 12px; }
   }
@@ -189,7 +215,8 @@
     <!-- CHAT -->
     <div class="tab active" id="tab-chat">
       <div class="chat-wrap">
-        <div class="chat-sidebar">
+        <div class="conv-overlay" id="conv-overlay" onclick="toggleConvPanel(false)"></div>
+        <div class="chat-sidebar" id="chat-sidebar">
           <div class="sidebar-section">
             <div class="sidebar-label">Máquina</div>
             <select class="sidebar-select" id="chat-machine">
@@ -210,11 +237,19 @@
           </div>
           <hr style="border-color:var(--border)">
           <div class="sidebar-section">
-            <div class="sidebar-label">Cómo funciona</div>
-            <p style="font-size:12px;color:var(--text3);line-height:1.6">Describe el síntoma o sube una foto del display de error. La IA buscará en el histórico y en internet para darte la mejor respuesta posible.</p>
+            <button class="nueva-conv-btn" onclick="nuevaConsulta()">✚ Nueva conversación</button>
+          </div>
+          <div class="sidebar-section" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
+            <div class="sidebar-label">Conversaciones (7 días)</div>
+            <div id="conv-list" class="conv-list"></div>
           </div>
         </div>
         <div class="chat-main">
+          <div class="chat-topbar">
+            <button class="chat-menu-btn" onclick="toggleConvPanel(true)" title="Conversaciones">☰</button>
+            <span class="chat-topbar-title">Asistente de averías</span>
+            <button class="chat-menu-btn" onclick="nuevaConsulta()" title="Nueva conversación">✚</button>
+          </div>
           <div class="messages" id="messages">
             <div class="msg bot">
               <div class="msg-avatar">⚡</div>
@@ -233,6 +268,7 @@
               <button class="icon-btn" onclick="document.getElementById('file-input').click()" title="Subir imagen">🖼</button>
               <input type="file" id="file-input" accept="image/*" style="display:none" onchange="handleFile(this)">
               <textarea id="chat-input" placeholder="Describe el síntoma..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}"></textarea>
+              <button class="icon-btn" onclick="nuevaConsulta()" title="Nueva consulta (olvidar lo anterior)">🗑</button>
               <button class="send-btn" onclick="sendMessage()" id="send-btn">Enviar</button>
             </div>
           </div>
@@ -632,6 +668,114 @@ async function loadHistorico() {
 // ===================== CHAT + IA =====================
 let currentImageBase64 = null;
 let currentImageMime = null;
+// Historial de la conversación del chat, para que la IA recuerde lo hablado.
+// Cada turno: { role:'user'|'model', text:'...', image?, imageMime? }
+let chatHistory = [];
+
+// ============ CONVERSACIONES GUARDADAS EN LOCAL (7 días) ============
+const CONV_STORE_KEY = 'av_conversaciones';
+const CONV_MAX_MS = 7 * 24 * 60 * 60 * 1000; // una semana
+let currentConvId = null;         // id de la conversación abierta
+let currentConvMsgs = [];         // mensajes visibles [{role:'bot'|'user', html, imgSrc}]
+
+function loadConvs() {
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem(CONV_STORE_KEY) || '[]'); } catch(e) { list = []; }
+  // Purgar las de más de 7 días
+  const ahora = Date.now();
+  list = list.filter(c => (ahora - (c.ts || 0)) < CONV_MAX_MS);
+  return list;
+}
+
+function saveConvs(list) {
+  try { localStorage.setItem(CONV_STORE_KEY, JSON.stringify(list)); } catch(e) { console.warn('No se pudo guardar', e); }
+}
+
+// Guarda/actualiza la conversación actual en localStorage
+function persistCurrentConv() {
+  if (!currentConvMsgs.length) return; // nada que guardar aún
+  let list = loadConvs();
+  // Título = primer mensaje del usuario, o genérico
+  const primerUser = currentConvMsgs.find(m => m.role === 'user');
+  const titulo = (primerUser?.html || 'Consulta').replace(/<[^>]*>/g, '').slice(0, 40) || 'Consulta';
+
+  const conv = {
+    id: currentConvId,
+    ts: Date.now(),
+    titulo,
+    // Aligerar: no guardamos las imágenes base64 (ocupan mucho y llenan el
+    // almacenamiento local). Se sustituyen por un aviso visual.
+    msgs: currentConvMsgs.map(m => ({
+      role: m.role,
+      html: m.html,
+      imgSrc: m.imgSrc ? '__IMG__' : null
+    })),
+    // El historial de la IA también se guarda sin las imágenes base64.
+    history: chatHistory.map(h => ({ role: h.role, text: h.text }))
+  };
+  const idx = list.findIndex(c => c.id === currentConvId);
+  if (idx >= 0) list[idx] = conv; else list.unshift(conv);
+  // ordenar por fecha desc
+  list.sort((a, b) => b.ts - a.ts);
+  saveConvs(list);
+  renderConvList();
+}
+
+function renderConvList() {
+  const cont = document.getElementById('conv-list');
+  if (!cont) return;
+  const list = loadConvs();
+  saveConvs(list); // reescribe ya purgado
+  if (!list.length) {
+    cont.innerHTML = '<div class="conv-empty">Aún no hay conversaciones guardadas.</div>';
+    return;
+  }
+  cont.innerHTML = list.map(c => {
+    const fecha = new Date(c.ts).toLocaleString('es-ES', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+    const act = c.id === currentConvId ? ' active' : '';
+    return `<div class="conv-item${act}" onclick="abrirConv('${c.id}')">
+      <button class="conv-del" onclick="event.stopPropagation();borrarConv('${c.id}')" title="Borrar">✕</button>
+      <div class="conv-title">${c.titulo}</div>
+      <div class="conv-date">${fecha}</div>
+    </div>`;
+  }).join('');
+}
+
+// Retomar una conversación: repinta sus mensajes y recupera la memoria de la IA
+function abrirConv(id) {
+  const list = loadConvs();
+  const conv = list.find(c => c.id === id);
+  if (!conv) return;
+  currentConvId = conv.id;
+  currentConvMsgs = conv.msgs || [];
+  chatHistory = conv.history || [];
+  const messages = document.getElementById('messages');
+  messages.innerHTML = '';
+  currentConvMsgs.forEach(m => {
+    const img = m.imgSrc === '__IMG__' ? null : m.imgSrc;
+    const html = m.imgSrc === '__IMG__' ? (m.html + '<div style="font-size:11px;color:var(--text3);margin-top:4px;">📷 (imagen no guardada)</div>') : m.html;
+    appendMsg(m.role, html, img, true);
+  });
+  renderConvList();
+  toggleConvPanel(false);
+}
+
+function borrarConv(id) {
+  let list = loadConvs().filter(c => c.id !== id);
+  saveConvs(list);
+  if (id === currentConvId) nuevaConsulta();
+  else renderConvList();
+}
+
+// Abre/cierra el panel de conversaciones (solo tiene efecto visual en móvil)
+function toggleConvPanel(abrir) {
+  const sb = document.getElementById('chat-sidebar');
+  const ov = document.getElementById('conv-overlay');
+  if (!sb || !ov) return;
+  if (abrir) { sb.classList.add('open'); ov.classList.add('open'); }
+  else { sb.classList.remove('open'); ov.classList.remove('open'); }
+}
+// ====================================================================
 let cameraStream = null;
 
 function removeImage() {
@@ -687,7 +831,7 @@ function capturePhoto() {
   closeCamera();
 }
 
-function appendMsg(role, html, imgSrc) {
+function appendMsg(role, html, imgSrc, repintando) {
   const messages = document.getElementById('messages');
   const div = document.createElement('div');
   div.className = `msg ${role}`;
@@ -700,6 +844,12 @@ function appendMsg(role, html, imgSrc) {
   `;
   messages.appendChild(div);
   messages.scrollTop = messages.scrollHeight;
+  // Registrar el mensaje para poder guardar/retomar la conversación.
+  // Al "repintar" una conversación ya guardada no lo volvemos a registrar.
+  if (!repintando) {
+    if (!currentConvId) currentConvId = 'c' + Date.now();
+    currentConvMsgs.push({ role, html, imgSrc: imgSrc || null });
+  }
   return div;
 }
 
@@ -718,16 +868,12 @@ function removeTyping() {
   if (t) t.remove();
 }
 
-async function callGemini(prompt, imageBase64, imageMime) {
+async function callGemini(prompt, imageBase64, imageMime, history) {
   const c = getCfg();
-  const parts = [];
-  if (imageBase64) {
-    parts.push({ inline_data: { mime_type: imageMime, data: imageBase64 } });
-  }
-  parts.push({ text: prompt });
 
   // Ahora la clave de Gemini vive en Supabase (secret GEMINI_API_KEY).
   // Llamamos a la Edge Function, que hace de intermediaria.
+  // Si se pasa "history", la IA recibe toda la conversación y así la recuerda.
   const res = await fetch(`${c.url}/functions/v1/brave-search`, {
     method: 'POST',
     headers: {
@@ -735,7 +881,12 @@ async function callGemini(prompt, imageBase64, imageMime) {
       'Authorization': `Bearer ${c.key}`,
       'apikey': c.key
     },
-    body: JSON.stringify({ prompt, image: imageBase64 || null, imageMime: imageMime || null })
+    body: JSON.stringify({
+      prompt,
+      image: imageBase64 || null,
+      imageMime: imageMime || null,
+      history: history || null
+    })
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || data.message || 'Error Gemini');
@@ -760,6 +911,22 @@ async function callBraveSearch(query) {
     console.warn('Brave search error:', e);
     return [];
   }
+}
+
+// Empieza una consulta nueva: borra el historial en memoria y los mensajes
+// en pantalla, dejando solo el saludo inicial. Úsalo al pasar a otra avería.
+function nuevaConsulta() {
+  chatHistory = [];
+  currentConvId = null;
+  currentConvMsgs = [];
+  removeImage();
+  const messages = document.getElementById('messages');
+  messages.innerHTML = `
+    <div class="msg bot">
+      <div class="msg-avatar">⚡</div>
+      <div class="msg-content">Nueva consulta. Describe el síntoma de la máquina o sube una foto del display de error y te ayudo a diagnosticarlo.</div>
+    </div>`;
+  renderConvList();
 }
 
 async function sendMessage() {
@@ -833,7 +1000,14 @@ Responde SOLO en este formato JSON sin markdown:
       : 'No hay averías previas registradas.';
 
     // 5. Prompt principal de diagnóstico
-    const diagPrompt = `Eres un asistente experto en mantenimiento industrial. Tu función es ayudar a técnicos a diagnosticar averías.
+    // Distinguimos entre la PRIMERA consulta (prompt completo con histórico +
+    // web + instrucciones) y las de SEGUIMIENTO (la IA ya recuerda todo por el
+    // historial, así que solo le pasamos la nueva pregunta y datos nuevos).
+    const esPrimera = chatHistory.length === 0;
+
+    let diagPrompt;
+    if (esPrimera) {
+      diagPrompt = `Eres un asistente experto en mantenimiento industrial. Tu función es ayudar a técnicos a diagnosticar averías. Mantén el contexto de toda la conversación: el técnico te hará preguntas de seguimiento y debes recordar lo ya hablado sin pedir que te lo repitan.
 
 CONSULTA DEL TÉCNICO: "${text || `(imagen con código de error: ${errorCode || 'no detectado'})`}"
 
@@ -850,8 +1024,23 @@ INSTRUCCIONES:
 4. Sé conciso y práctico — habla como un técnico senior a un técnico.
 5. Si hay resultados web relevantes, menciónalos.
 6. Responde en español.`;
+    } else {
+      diagPrompt = `PREGUNTA DE SEGUIMIENTO DEL TÉCNICO: "${text || `(imagen con código de error: ${errorCode || 'no detectado'})`}"
 
-    const respuesta = await callGemini(diagPrompt, null, null);
+${webResults.length ? `NUEVOS RESULTADOS WEB (código ${errorCode}):
+${webResults.map(r => `- ${r.title}: ${r.description} (${r.url})`).join('\n')}
+` : ''}Responde teniendo en cuenta TODO lo que ya hemos hablado en esta conversación. Sé conciso y práctico, como un técnico senior. Responde en español.`;
+    }
+
+    const respuesta = await callGemini(diagPrompt, null, null, chatHistory);
+
+    // Guardar este turno en el historial para que la IA lo recuerde en las
+    // siguientes preguntas. Guardamos la consulta REAL del técnico (no el
+    // prompt gigante con instrucciones), y la respuesta del asistente.
+    chatHistory.push({ role: 'user', text: text || `(imagen con código de error: ${errorCode || 'no detectado'})` });
+    chatHistory.push({ role: 'model', text: respuesta });
+    // Limitar el historial para no crecer sin fin (últimos 12 turnos).
+    if (chatHistory.length > 12) chatHistory = chatHistory.slice(-12);
 
     removeTyping();
 
@@ -875,10 +1064,12 @@ INSTRUCCIONES:
     }
 
     appendMsg('bot', html);
+    persistCurrentConv();
 
   } catch(e) {
     removeTyping();
     appendMsg('bot', `⚠️ Error: ${e.message}`);
+    persistCurrentConv();
   } finally {
     sendBtn.disabled = false;
   }
@@ -896,6 +1087,7 @@ function showTab(name) {
 // ===================== INIT =====================
 loadConfigUI();
 loadMachines();
+renderConvList();
 
 // Registrar Service Worker (PWA)
 if ('serviceWorker' in navigator) {
