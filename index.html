@@ -51,6 +51,8 @@
   .sidebar-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text3); font-weight: 600; }
   .sidebar-select { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: var(--radius); font-size: 13px; width: 100%; }
   .nueva-conv-btn { width:100%; background: var(--accent); border:none; color:#000; padding:10px; border-radius: var(--radius); font-size:13px; font-weight:700; cursor:pointer; }
+  .guardar-sol-btn { width:100%; margin-top:6px; background: var(--surface2); border:1px solid var(--border); color:var(--text); padding:10px; border-radius: var(--radius); font-size:13px; font-weight:600; cursor:pointer; }
+  .guardar-sol-btn:hover { border-color: var(--success, #22c55e); }
   .conv-list { margin-top:8px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; }
   .conv-item { background: var(--surface2); border:1px solid var(--border); border-radius: var(--radius); padding:8px 10px; cursor:pointer; position:relative; }
   .conv-item:hover { border-color: var(--accent2); }
@@ -238,6 +240,7 @@
           <hr style="border-color:var(--border)">
           <div class="sidebar-section">
             <button class="nueva-conv-btn" onclick="nuevaConsulta()">✚ Nueva conversación</button>
+            <button class="guardar-sol-btn" onclick="guardarSolucionIA()">✅ Guardar solución</button>
           </div>
           <div class="sidebar-section" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
             <div class="sidebar-label">Conversaciones (7 días)</div>
@@ -248,7 +251,7 @@
           <div class="chat-topbar">
             <button class="chat-menu-btn" onclick="toggleConvPanel(true)" title="Conversaciones">☰</button>
             <span class="chat-topbar-title">Asistente de averías</span>
-            <button class="chat-menu-btn" onclick="nuevaConsulta()" title="Nueva conversación">✚</button>
+            <button class="chat-menu-btn" onclick="guardarSolucionIA()" title="Guardar solución en histórico">✅</button>
           </div>
           <div class="messages" id="messages">
             <div class="msg bot">
@@ -412,6 +415,48 @@
     <div class="modal-btns">
       <button class="btn btn-secondary" onclick="closeAddMachineModal()">Cancelar</button>
       <button class="btn btn-primary" id="mach-save-btn" onclick="saveMachineModal()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="solucion-modal">
+  <div class="modal" style="max-width:460px">
+    <h3>✅ Guardar avería resuelta</h3>
+    <p style="font-size:12px;color:var(--text3);margin-top:4px">La IA ha resumido la conversación. Revisa y corrige antes de guardarlo en el histórico.</p>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-top:14px;max-height:60vh;overflow-y:auto">
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:12px;color:var(--text2)">Máquina</label>
+        <select id="sol-machine"><option value="">— Sin máquina —</option></select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:12px;color:var(--text2)">Tipo <span style="color:var(--accent)">*</span></label>
+        <select id="sol-almacen">
+          <option value="">— Selecciona —</option>
+          <option value="Eléctrico">Eléctrico</option>
+          <option value="Mecánico">Mecánico</option>
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:12px;color:var(--text2)">Técnico <span style="color:var(--accent)">*</span></label>
+        <input type="text" id="sol-tecnico" placeholder="Tu nombre">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:12px;color:var(--text2)">Síntoma <span style="color:var(--accent)">*</span></label>
+        <textarea id="sol-sintoma" rows="2"></textarea>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:12px;color:var(--text2)">Causa</label>
+        <textarea id="sol-causa" rows="2"></textarea>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:12px;color:var(--text2)">Solución</label>
+        <textarea id="sol-solucion" rows="3"></textarea>
+      </div>
+      <div id="sol-msg" style="font-size:12px;color:var(--danger)"></div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" onclick="cerrarSolucionModal()">Cancelar</button>
+      <button class="btn btn-primary" id="sol-save-btn" onclick="confirmarGuardarSolucion()">Guardar en histórico</button>
     </div>
   </div>
 </div>
@@ -774,6 +819,115 @@ function toggleConvPanel(abrir) {
   if (!sb || !ov) return;
   if (abrir) { sb.classList.add('open'); ov.classList.add('open'); }
   else { sb.classList.remove('open'); ov.classList.remove('open'); }
+}
+
+// ============ GUARDAR SOLUCIÓN EN EL HISTÓRICO (aprendizaje) ============
+// Pide a la IA que resuma la conversación en síntoma/causa/solución,
+// abre el modal con los campos rellenos y editables para que el técnico
+// revise, y al confirmar lo guarda en la tabla 'averias' de Supabase.
+async function guardarSolucionIA() {
+  if (!chatHistory.length) {
+    alert('No hay ninguna conversación para resumir. Habla primero con el asistente sobre la avería.');
+    return;
+  }
+  toggleConvPanel(false);
+
+  // Construir el texto de la conversación para que la IA lo resuma
+  const convTexto = chatHistory.map(m => `${m.role === 'user' ? 'TÉCNICO' : 'ASISTENTE'}: ${m.text}`).join('\n');
+  const resumenPrompt = `Resume la siguiente conversación de diagnóstico de una avería industrial en tres campos claros y concisos. Responde SOLO con JSON válido sin markdown, con este formato exacto:
+{"sintoma":"...","causa":"...","solucion":"..."}
+
+- sintoma: qué fallo o síntoma presentaba la máquina (1-2 frases).
+- causa: qué resultó ser el problema real (si no está claro en la conversación, pon lo más probable indicándolo).
+- solucion: los pasos concretos que resolvieron o resolverían el problema.
+
+CONVERSACIÓN:
+${convTexto}`;
+
+  const btnTop = document.querySelectorAll('.chat-menu-btn');
+  showTyping();
+  try {
+    const resp = await callGemini(resumenPrompt, null, null, null);
+    removeTyping();
+    let parsed = { sintoma: '', causa: '', solucion: '' };
+    try {
+      const clean = resp.replace(/```json|```/g, '').trim();
+      parsed = JSON.parse(clean);
+    } catch(e) {
+      // Si no vino JSON limpio, al menos volcamos el texto en solución
+      parsed.solucion = resp;
+    }
+
+    // Rellenar el modal
+    document.getElementById('sol-sintoma').value = parsed.sintoma || '';
+    document.getElementById('sol-causa').value = parsed.causa || '';
+    document.getElementById('sol-solucion').value = parsed.solucion || '';
+
+    // Precargar máquina/tipo/técnico desde el sidebar del chat
+    poblarSelectMaquinas('sol-machine');
+    document.getElementById('sol-machine').value = document.getElementById('chat-machine').value || '';
+    document.getElementById('sol-almacen').value = document.getElementById('chat-almacen').value || '';
+    document.getElementById('sol-tecnico').value = document.getElementById('chat-tecnico').value || '';
+    document.getElementById('sol-msg').textContent = '';
+
+    document.getElementById('solucion-modal').classList.remove('hidden');
+  } catch(e) {
+    removeTyping();
+    alert('No se pudo generar el resumen: ' + e.message);
+  }
+}
+
+// Rellena un <select> con las máquinas conocidas (reutiliza machinesCache)
+function poblarSelectMaquinas(selectId) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Sin máquina —</option>';
+  (machinesCache || []).forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m.id;
+    opt.textContent = m.name;
+    sel.appendChild(opt);
+  });
+}
+
+function cerrarSolucionModal() {
+  document.getElementById('solucion-modal').classList.add('hidden');
+}
+
+async function confirmarGuardarSolucion() {
+  const sintoma = document.getElementById('sol-sintoma').value.trim();
+  const almacen = document.getElementById('sol-almacen').value;
+  const tecnico = document.getElementById('sol-tecnico').value.trim();
+  const msg = document.getElementById('sol-msg');
+
+  if (!sintoma || !almacen || !tecnico) {
+    msg.style.color = 'var(--danger)';
+    msg.textContent = 'Síntoma, tipo y técnico son obligatorios.';
+    return;
+  }
+
+  const data = {
+    machine_id: document.getElementById('sol-machine').value || null,
+    almacen,
+    sintoma,
+    causa: document.getElementById('sol-causa').value.trim() || null,
+    solucion: document.getElementById('sol-solucion').value.trim() || null,
+    tecnico
+  };
+
+  const btn = document.getElementById('sol-save-btn');
+  try {
+    btn.disabled = true;
+    await insertAveria(data);
+    cerrarSolucionModal();
+    appendMsg('bot', '✅ <strong>Avería guardada en el histórico.</strong> La próxima vez que aparezca un problema parecido, la usaré como referencia.');
+    persistCurrentConv();
+  } catch(e) {
+    msg.style.color = 'var(--danger)';
+    msg.textContent = 'Error al guardar: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
 }
 // ====================================================================
 let cameraStream = null;
