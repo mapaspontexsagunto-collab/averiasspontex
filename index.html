@@ -199,6 +199,7 @@
     nav .nav-btn { padding: 6px 8px; font-size: 12px; }
   }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
 <div class="app">
@@ -241,6 +242,8 @@
           <div class="sidebar-section">
             <button class="nueva-conv-btn" onclick="nuevaConsulta()">✚ Nueva conversación</button>
             <button class="guardar-sol-btn" onclick="guardarSolucionIA()">✅ Guardar solución</button>
+            <button class="guardar-sol-btn" onclick="document.getElementById('pdf-input').click()">📄 Importar parte (PDF)</button>
+            <input type="file" id="pdf-input" accept="application/pdf" style="display:none" onchange="importarParte(this.files[0])">
           </div>
           <div class="sidebar-section" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
             <div class="sidebar-label">Conversaciones (7 días)</div>
@@ -461,10 +464,27 @@
   </div>
 </div>
 
+<div class="modal-overlay hidden" id="parte-modal">
+  <div class="modal" style="max-width:560px">
+    <h3>📄 Averías detectadas en el parte</h3>
+    <p style="font-size:12px;color:var(--text3);margin-top:4px">La IA ha extraído lo siguiente. Revisa, corrige y marca las que quieras guardar.</p>
+    <div id="parte-list" style="display:flex;flex-direction:column;gap:14px;margin-top:14px;max-height:60vh;overflow-y:auto"></div>
+    <div id="parte-msg" style="font-size:12px;color:var(--danger);margin-top:8px"></div>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" onclick="cerrarParteModal()">Cancelar</button>
+      <button class="btn btn-primary" id="parte-save-btn" onclick="confirmarGuardarParte()">Guardar seleccionadas</button>
+    </div>
+  </div>
+</div>
+
 <canvas id="canvas" style="display:none"></canvas>
 
 <script>
 // ===================== CONFIG =====================
+// Configurar el "worker" de pdf.js (necesario para leer PDFs).
+if (typeof pdfjsLib !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
 const DEFAULT_SUPABASE_URL = 'https://edhjylauvxcbrevgzpjw.supabase.co';
 const DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkaGp5bGF1dnhjYnJldmd6cGp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4NjUzMjIsImV4cCI6MjA5ODQ0MTMyMn0.U0nyuHvjD1t9uEsxcofpx1mKmA5PfycISqYTWfmToW8';
 
@@ -820,6 +840,179 @@ function toggleConvPanel(abrir) {
   if (abrir) { sb.classList.add('open'); ov.classList.add('open'); }
   else { sb.classList.remove('open'); ov.classList.remove('open'); }
 }
+
+// ============ IMPORTAR PARTE DE TRABAJO (PDF) =======================
+let partesDetectados = []; // averías extraídas del PDF pendientes de guardar
+
+async function extraerTextoPDF(file) {
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  let texto = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    texto += content.items.map(it => it.str).join(' ') + '\n';
+  }
+  return texto.trim();
+}
+
+async function importarParte(file) {
+  document.getElementById('pdf-input').value = '';
+  if (!file) return;
+  if (typeof pdfjsLib === 'undefined') {
+    alert('No se pudo cargar el lector de PDF. Comprueba tu conexión e inténtalo de nuevo.');
+    return;
+  }
+  toggleConvPanel(false);
+  showTyping();
+  try {
+    const texto = await extraerTextoPDF(file);
+    if (!texto || texto.length < 20) {
+      removeTyping();
+      alert('No se pudo leer texto del PDF (puede ser un PDF escaneado sin texto).');
+      return;
+    }
+
+    const prompt = `Eres un asistente que extrae averías de partes de trabajo de mantenimiento industrial. Del siguiente texto, identifica CADA avería o incidencia distinta (un parte puede contener más de una si el técnico las mezcló; sepáralas). Para cada una devuelve síntoma, causa y solución.
+
+Responde SOLO con JSON válido sin markdown, con este formato exacto:
+{"tecnico":"...","averias":[{"maquina":"...","almacen":"Eléctrico|Mecánico","sintoma":"...","causa":"...","solucion":"..."}]}
+
+- tecnico: el técnico que firma el parte (uno para todo el parte).
+- maquina: el equipo afectado (ej: "Carda 4"). Si no se indica, cadena vacía.
+- almacen: pon "Eléctrico" si la avería es eléctrica/electrónica (variadores, encoders, PLC, señales), "Mecánico" si es mecánica. Si dudas, "Eléctrico".
+- sintoma: qué fallaba.
+- causa: qué resultó ser el problema.
+- solucion: cómo se resolvió (pasos concretos).
+Si solo hay una avería, devuelve un array de un elemento.
+
+TEXTO DEL PARTE:
+${texto}`;
+
+    const resp = await callGemini(prompt, null, null, null);
+    removeTyping();
+
+    let data;
+    try {
+      data = JSON.parse(resp.replace(/```json|```/g, '').trim());
+    } catch(e) {
+      alert('La IA no devolvió un formato válido. Inténtalo de nuevo.');
+      return;
+    }
+
+    const averias = Array.isArray(data.averias) ? data.averias : [];
+    if (!averias.length) {
+      alert('No se detectaron averías en el parte.');
+      return;
+    }
+    partesDetectados = averias.map(a => ({ ...a, tecnico: data.tecnico || '' }));
+    renderParteModal();
+    document.getElementById('parte-modal').classList.remove('hidden');
+  } catch(e) {
+    removeTyping();
+    alert('Error al procesar el PDF: ' + e.message);
+  }
+}
+
+function renderParteModal() {
+  const cont = document.getElementById('parte-list');
+  document.getElementById('parte-msg').textContent = '';
+  const opcionesMaquina = (maquinaTexto) => {
+    let opts = '<option value="">— Sin máquina —</option>';
+    (machinesCache || []).forEach(m => { opts += `<option value="${m.id}">${m.name}</option>`; });
+    if (maquinaTexto && !(machinesCache || []).some(m => m.name.toLowerCase() === maquinaTexto.toLowerCase())) {
+      opts += `<option value="__nueva__:${maquinaTexto}" selected>➕ Crear "${maquinaTexto}"</option>`;
+    }
+    return opts;
+  };
+
+  cont.innerHTML = partesDetectados.map((a, i) => `
+    <div style="border:1px solid var(--border);border-radius:var(--radius);padding:12px;background:var(--surface2)">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;margin-bottom:10px;cursor:pointer">
+        <input type="checkbox" class="parte-check" data-i="${i}" checked> Guardar esta avería #${i+1}
+      </label>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:11px;color:var(--text2)">Máquina</label>
+          <select class="parte-maquina" data-i="${i}">${opcionesMaquina(a.maquina)}</select>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:11px;color:var(--text2)">Tipo</label>
+          <select class="parte-almacen" data-i="${i}">
+            <option value="Eléctrico"${a.almacen === 'Eléctrico' ? ' selected' : ''}>Eléctrico</option>
+            <option value="Mecánico"${a.almacen === 'Mecánico' ? ' selected' : ''}>Mecánico</option>
+          </select>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:11px;color:var(--text2)">Técnico</label>
+          <input type="text" class="parte-tecnico" data-i="${i}" value="${(a.tecnico||'').replace(/"/g,'&quot;')}">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:11px;color:var(--text2)">Síntoma</label>
+          <textarea class="parte-sintoma" data-i="${i}" rows="2">${a.sintoma||''}</textarea>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:11px;color:var(--text2)">Causa</label>
+          <textarea class="parte-causa" data-i="${i}" rows="2">${a.causa||''}</textarea>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:11px;color:var(--text2)">Solución</label>
+          <textarea class="parte-solucion" data-i="${i}" rows="3">${a.solucion||''}</textarea>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function cerrarParteModal() {
+  document.getElementById('parte-modal').classList.add('hidden');
+  partesDetectados = [];
+}
+
+async function confirmarGuardarParte() {
+  const checks = [...document.querySelectorAll('.parte-check')].filter(c => c.checked);
+  const msg = document.getElementById('parte-msg');
+  if (!checks.length) { msg.textContent = 'No has marcado ninguna avería para guardar.'; return; }
+  const btn = document.getElementById('parte-save-btn');
+  const val = (cls, i) => document.querySelector(`.${cls}[data-i="${i}"]`).value.trim();
+
+  try {
+    btn.disabled = true;
+    let guardadas = 0;
+    for (const chk of checks) {
+      const i = chk.dataset.i;
+      const sintoma = val('parte-sintoma', i);
+      const tecnico = val('parte-tecnico', i);
+      const almacen = document.querySelector(`.parte-almacen[data-i="${i}"]`).value;
+      if (!sintoma || !tecnico) continue;
+
+      let machineId = document.querySelector(`.parte-maquina[data-i="${i}"]`).value;
+      if (machineId.startsWith('__nueva__:')) {
+        const nombre = machineId.slice('__nueva__:'.length);
+        await insertMachine({ name: nombre, modelo: null, ubicacion: null });
+        await loadMachines();
+        const m = (machinesCache || []).find(x => x.name.toLowerCase() === nombre.toLowerCase());
+        machineId = m ? m.id : null;
+      }
+
+      await insertAveria({
+        machine_id: machineId || null,
+        almacen, sintoma,
+        causa: val('parte-causa', i) || null,
+        solucion: val('parte-solucion', i) || null,
+        tecnico
+      });
+      guardadas++;
+    }
+    cerrarParteModal();
+    appendMsg('bot', `✅ <strong>${guardadas} avería(s) del parte guardadas en el histórico.</strong>`);
+  } catch(e) {
+    msg.textContent = 'Error al guardar: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+// ====================================================================
 
 // ============ GUARDAR SOLUCIÓN EN EL HISTÓRICO (aprendizaje) ============
 // Pide a la IA que resuma la conversación en síntoma/causa/solución,
