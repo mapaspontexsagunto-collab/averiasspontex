@@ -382,44 +382,16 @@
 
     <!-- MANUALES -->
     <div class="tab" id="tab-manuales">
-      <div class="historico-wrap">
-        <div class="historico-header">
-          <h2>Manuales</h2>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="add-btn" onclick="identificarEquipo()">📷 Identificar equipo</button>
-            <button class="add-btn" style="background:var(--surface2);color:var(--text)" onclick="document.getElementById('manual-pdf-input').click()">📄 Subir manual (PDF)</button>
-          </div>
-          <input type="file" id="manual-pdf-input" accept="application/pdf" style="display:none" onchange="importarManual(this.files[0])">
-          <input type="file" id="manual-cam-input" accept="image/*" capture="environment" style="display:none" onchange="procesarFotoEquipo(this.files[0])">
-          <input type="file" id="manual-gal-input" accept="image/*" style="display:none" onchange="procesarFotoEquipo(this.files[0])">
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:40px 24px;text-align:center;gap:24px">
+        <div style="font-size:56px">📒</div>
+        <div>
+          <div style="font-size:20px;font-weight:700;margin-bottom:8px">Manuales técnicos</div>
+          <div style="font-size:14px;color:var(--text3);max-width:320px;line-height:1.6">Consulta tus manuales de variadores, quemadores y PLCs en NotebookLM. Sube el PDF allí y pregunta directamente sobre él.</div>
         </div>
-        <!-- Panel de identificación: aparece tras hacer la foto -->
-        <div id="identificacion-panel" style="display:none;margin-bottom:16px;border:1px solid var(--border);border-radius:var(--radius);padding:14px;background:var(--surface2)">
-          <div style="font-size:13px;font-weight:600;margin-bottom:8px">📷 Equipo identificado</div>
-          <div id="id-resultado" style="font-size:13px;color:var(--text2);margin-bottom:10px"></div>
-          <div id="id-manuales" style="display:flex;flex-direction:column;gap:6px"></div>
-        </div>
-        <div class="historico-filters" style="margin-bottom:14px">
-          <select class="filter-select" id="filter-manual" onchange="verManual()">
-            <option value="">Selecciona un manual…</option>
-          </select>
-        </div>
-        <div id="manual-detalle">
-          <div class="empty-state">Sube un manual o selecciona uno para ver sus códigos de fallo y parámetros.</div>
-        </div>
-
-        <!-- Chat RAG del manual -->
-        <div id="manual-chat" style="display:none;flex-direction:column;border:1px solid var(--border);border-radius:var(--radius);margin-top:16px;overflow:hidden">
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border)">
-            <span style="font-size:13px;font-weight:600">💬 Consultar: <span id="manual-chat-titulo"></span></span>
-            <button class="averia-edit-btn" onclick="cerrarChatManual()">✕ Cerrar</button>
-          </div>
-          <div id="manual-chat-msgs" style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;min-height:200px;max-height:400px"></div>
-          <div style="display:flex;gap:8px;padding:10px;border-top:1px solid var(--border);background:var(--surface)">
-            <textarea id="manual-chat-input" placeholder="Pregunta sobre el manual…" rows="1" style="flex:1;font-size:16px;resize:none;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;color:var(--text)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendManualMsg()}"></textarea>
-            <button id="manual-chat-send" class="send-btn" onclick="sendManualMsg()">Enviar</button>
-          </div>
-        </div>
+        <a href="https://notebooklm.google.com" target="_blank" rel="noopener" class="send-btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;padding:14px 24px;font-size:15px">
+          Abrir NotebookLM →
+        </a>
+        <div style="font-size:12px;color:var(--text3)">Se abre en el navegador o en la app si la tienes instalada</div>
       </div>
     </div>
 
@@ -582,79 +554,6 @@
   </div>
 </div>
 
-<div class="modal-overlay hidden" id="manual-modal">
-  <div class="modal" style="max-width:640px">
-    <h3>📖 Datos extraídos del manual</h3>
-    <p style="font-size:12px;color:var(--text3);margin-top:4px">Revisa la marca/modelo/tipo y los datos extraídos. Puedes editar antes de guardar.</p>
-    <div style="display:flex;flex-direction:column;gap:12px;margin-top:14px;max-height:64vh;overflow-y:auto">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-        <div style="display:flex;flex-direction:column;gap:4px">
-          <label style="font-size:11px;color:var(--text2)">Marca</label>
-          <input type="text" id="man-marca">
-        </div>
-        <div style="display:flex;flex-direction:column;gap:4px">
-          <label style="font-size:11px;color:var(--text2)">Modelo</label>
-          <input type="text" id="man-modelo">
-        </div>
-        <div style="display:flex;flex-direction:column;gap:4px">
-          <label style="font-size:11px;color:var(--text2)">Tipo</label>
-          <input type="text" id="man-tipo" placeholder="variador, quemador...">
-        </div>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:4px">
-        <label style="font-size:11px;color:var(--text2)">Nombre del manual</label>
-        <input type="text" id="man-nombre">
-      </div>
-      <div>
-        <div style="font-size:13px;font-weight:600;margin:6px 0">Códigos de fallo (<span id="man-cod-count">0</span>)</div>
-        <div id="man-codigos" style="display:flex;flex-direction:column;gap:6px"></div>
-      </div>
-      <div>
-        <div style="font-size:13px;font-weight:600;margin:6px 0">Parámetros (<span id="man-par-count">0</span>)</div>
-        <div id="man-parametros" style="display:flex;flex-direction:column;gap:6px"></div>
-      </div>
-      <div id="man-msg" style="font-size:12px;color:var(--danger)"></div>
-    </div>
-    <div class="modal-btns">
-      <button class="btn btn-secondary" onclick="cerrarManualModal()">Cancelar</button>
-      <button class="btn btn-primary" id="man-save-btn" onclick="confirmarGuardarManual()">Guardar manual</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-overlay hidden" id="foto-equipo-modal">
-  <div class="modal" style="max-width:320px">
-    <h3>📷 Identificar equipo</h3>
-    <p style="font-size:12px;color:var(--text3);margin-top:4px">Haz una foto a la etiqueta del equipo o sube una imagen.</p>
-    <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px">
-      <button class="btn btn-primary" onclick="document.getElementById('foto-equipo-modal').classList.add('hidden');document.getElementById('manual-cam-input').click()">📷 Cámara</button>
-      <button class="btn btn-primary" onclick="document.getElementById('foto-equipo-modal').classList.add('hidden');document.getElementById('manual-gal-input').click()">🖼 Galería</button>
-      <button class="btn btn-secondary" onclick="document.getElementById('foto-equipo-modal').classList.add('hidden')">Cancelar</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-overlay hidden" id="tipo-pdf-modal">
-  <div class="modal" style="max-width:380px">
-    <h3>¿Qué contiene este PDF?</h3>
-    <p style="font-size:12px;color:var(--text3);margin-top:4px">Elige qué debe extraer la IA de este documento.</p>
-    <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px">
-      <button class="btn btn-primary" onclick="procesarManual('codigos')">🔴 Códigos de fallo</button>
-      <button class="btn btn-primary" onclick="procesarManual('parametros')">⚙️ Parámetros</button>
-      <button class="btn btn-primary" onclick="procesarManual('ambos')">📖 Ambos</button>
-      <button class="btn btn-secondary" onclick="document.getElementById('tipo-pdf-modal').classList.add('hidden')">Cancelar</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-overlay hidden" id="procesando-modal">
-  <div class="modal" style="max-width:320px;text-align:center">
-    <div style="font-size:32px;margin-bottom:10px">⏳</div>
-    <h3 id="procesando-txt">Procesando, espera…</h3>
-    <p style="font-size:12px;color:var(--text3);margin-top:8px">Esto puede tardar en manuales largos.</p>
-  </div>
-</div>
-
 <canvas id="canvas" style="display:none"></canvas>
 
 <script>
@@ -718,63 +617,6 @@ async function getMachines() {
   return await sbFetch('machines?select=*&order=name.asc');
 }
 
-// ---- Manuales ----
-async function getManuales() {
-  return await sbFetch('manuales?select=*&order=marca.asc');
-}
-async function insertManual(data) {
-  return await sbFetch('manuales', { method: 'POST', body: JSON.stringify(data), prefer: 'return=representation' });
-}
-async function insertCodigos(rows) {
-  if (!rows.length) return null;
-  return await sbFetch('manual_codigos', { method: 'POST', body: JSON.stringify(rows), prefer: 'return=minimal' });
-}
-async function insertParametros(rows) {
-  if (!rows.length) return null;
-  return await sbFetch('manual_parametros', { method: 'POST', body: JSON.stringify(rows), prefer: 'return=minimal' });
-}
-async function getCodigos(manualId) {
-  return await sbFetch(`manual_codigos?select=*&manual_id=eq.${manualId}&order=codigo.asc`);
-}
-async function getParametros(manualId) {
-  return await sbFetch(`manual_parametros?select=*&manual_id=eq.${manualId}&order=parametro.asc`);
-}
-async function deleteManual(id) {
-  return await sbFetch(`manuales?id=eq.${id}`, { method: 'DELETE', prefer: 'return=representation' });
-}
-async function insertChunks(rows) {
-  if (!rows.length) return null;
-  // Insertar en lotes de 50 para no saturar
-  for (let i = 0; i < rows.length; i += 50) {
-    await sbFetch('manual_chunks', { method: 'POST', body: JSON.stringify(rows.slice(i, i+50)), prefer: 'return=minimal' });
-  }
-}
-async function deleteChunks(manualId) {
-  return await sbFetch(`manual_chunks?manual_id=eq.${manualId}`, { method: 'DELETE', prefer: 'return=minimal' });
-}
-async function buscarChunks(embedding, manualId, count) {
-  // Llama a la función SQL de búsqueda por similitud
-  return await sbFetch('rpc/buscar_chunks', {
-    method: 'POST',
-    body: JSON.stringify({ query_embedding: embedding, filtro_manual: manualId, match_count: count || 5 }),
-    prefer: null
-  });
-}
-
-// Genera un embedding (vector) para un texto usando la API de Google directamente.
-async function generarEmbedding(texto) {
-  const key = getCfg().gemini;
-  if (!key) throw new Error('Necesitas la Gemini API Key en Config para usar la búsqueda inteligente.');
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${key}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'models/text-embedding-004', content: { parts: [{ text: texto.slice(0, 2000) }] } })
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error?.message || 'Error al generar embedding');
-  return data.embedding?.values || [];
-}
 
 async function getAverias(machineId, almacen) {
   let q = 'averias?select=*,machines(name)&order=created_at.desc';
@@ -1114,8 +956,6 @@ let currentImageMime = null;
 // Historial de la conversación del chat, para que la IA recuerde lo hablado.
 // Cada turno: { role:'user'|'model', text:'...', image?, imageMime? }
 let chatHistory = [];
-let modoManual = false;    // true cuando el chat viene desde un manual identificado
-let equipoContexto = '';   // nombre del equipo en modo manual
 
 // ============ CONVERSACIONES GUARDADAS EN LOCAL (7 días) ============
 const CONV_STORE_KEY = 'av_conversaciones';
@@ -1220,538 +1060,6 @@ function toggleConvPanel(abrir) {
   if (abrir) { sb.classList.add('open'); ov.classList.add('open'); }
   else { sb.classList.remove('open'); ov.classList.remove('open'); }
 }
-
-// ============ IDENTIFICACIÓN DE EQUIPO POR FOTO (Fase 2) ============
-function identificarEquipo() {
-  document.getElementById('manual-cam-input').value = '';
-  document.getElementById('manual-gal-input').value = '';
-  document.getElementById('foto-equipo-modal').classList.remove('hidden');
-}
-
-async function procesarFotoEquipo(file) {
-  if (!file) return;
-  const geminiKey = getCfg().gemini;
-  if (!geminiKey) {
-    alert('Para identificar equipos por foto necesitas la Gemini API Key en la pestaña Config.');
-    return;
-  }
-  mostrarProcesando('Analizando la etiqueta del equipo…');
-  try {
-    // Convertir imagen a base64
-    const b64 = await new Promise((res, rej) => {
-      const r = new FileReader();
-      r.onload = () => res(r.result.split(',')[1]);
-      r.onerror = rej;
-      r.readAsDataURL(file);
-    });
-    const mime = file.type || 'image/jpeg';
-
-    // Llamada directa a Gemini con imagen + prompt
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { inline_data: { mime_type: mime, data: b64 } },
-            { text: `Analiza esta imagen de la etiqueta de un equipo industrial. Identifica la marca fabricante, el modelo o familia de producto, y el tipo de equipo (variador de frecuencia, controlador de quemador, PLC, etc.).
-Responde SOLO con JSON válido sin markdown:
-{"marca":"...","modelo":"...","tipo":"...","descripcion":"...","confianza":"alta|media|baja"}
-- marca: fabricante (ej: "Control Techniques", "Siemens", "Honeywell")
-- modelo: modelo o familia (ej: "Commander C300", "M700", "Simatic S7")
-- tipo: tipo de equipo en español
-- descripcion: breve descripción de lo que ves en la etiqueta (1 frase)
-- confianza: qué tan seguro estás de la identificación` }
-          ]
-        }]
-      })
-    });
-    const data = await res.json();
-    ocultarProcesando();
-    if (!res.ok) throw new Error(data.error?.message || 'Error Gemini');
-
-    const texto = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    let ident = {};
-    try { ident = JSON.parse(texto.replace(/```json|```/g, '').trim()); } catch(e) {
-      ident = { marca: '', modelo: '', tipo: '', descripcion: texto, confianza: 'baja' };
-    }
-
-    mostrarResultadoIdentificacion(ident);
-  } catch(e) {
-    ocultarProcesando();
-    alert('Error al analizar la imagen: ' + e.message);
-  }
-}
-
-function mostrarResultadoIdentificacion(ident) {
-  const panel = document.getElementById('identificacion-panel');
-  const resDiv = document.getElementById('id-resultado');
-  const manDiv = document.getElementById('id-manuales');
-  panel.style.display = 'block';
-
-  const confianzaColor = { alta: '#22c55e', media: '#f59e0b', baja: '#ef4444' };
-  const col = confianzaColor[ident.confianza] || '#6b7280';
-
-  resDiv.innerHTML = `
-    <div style="margin-bottom:6px">
-      <strong>${[ident.marca, ident.modelo].filter(Boolean).join(' · ') || 'No identificado'}</strong>
-      <span style="margin-left:8px;font-size:11px;color:${col};background:${col}22;padding:2px 6px;border-radius:99px">
-        ${ident.confianza || '?'}
-      </span>
-    </div>
-    ${ident.tipo ? `<div style="font-size:12px;color:var(--text3)">${ident.tipo}</div>` : ''}
-    ${ident.descripcion ? `<div style="font-size:12px;color:var(--text3);margin-top:4px">${ident.descripcion}</div>` : ''}`;
-
-  // Buscar manuales que coincidan (marca o modelo)
-  const terminos = [ident.marca, ident.modelo].filter(Boolean)
-    .map(t => t.toLowerCase().replace(/[^a-z0-9]/g, ''));
-
-  const todos = Array.from(document.getElementById('filter-manual').options)
-    .filter(o => o.value)
-    .map(o => ({ id: o.value, texto: o.textContent }));
-
-  const coincidentes = todos.filter(m => {
-    const mt = m.texto.toLowerCase().replace(/[^a-z0-9]/g, '');
-    return terminos.some(t => t && (mt.includes(t) || t.includes(mt.slice(0, Math.max(4, t.length - 2)))));
-  });
-
-  if (!coincidentes.length) {
-    manDiv.innerHTML = `<div style="font-size:12px;color:var(--text3)">No se encontraron manuales guardados para este equipo. ¿Quieres <a href="#" onclick="event.preventDefault();document.getElementById('manual-pdf-input').click()">subir el manual</a>?</div>`;
-    return;
-  }
-
-  manDiv.innerHTML = `<div style="font-size:12px;color:var(--text2);margin-bottom:6px">Manuales encontrados:</div>` +
-    coincidentes.map(m => `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px">
-        <span style="font-size:13px">${m.texto}</span>
-        <div style="display:flex;gap:6px;flex-shrink:0">
-          <button class="averia-edit-btn" onclick="seleccionarManualIdentificado('${m.id}')">Ver</button>
-          <button class="averia-edit-btn" style="border-color:var(--accent);color:var(--accent)" onclick="abrirChatConEquipo('${m.id}','${(ident.marca+' '+ident.modelo).trim().replace(/'/g,'')}')">💬 Chat</button>
-        </div>
-      </div>`).join('');
-}
-
-function seleccionarManualIdentificado(id) {
-  document.getElementById('filter-manual').value = id;
-  verManual();
-  document.getElementById('manual-detalle').scrollIntoView({ behavior: 'smooth' });
-}
-
-function abrirChatConEquipo(manualId, equipoNombre) {
-  Promise.all([getCodigos(manualId), getParametros(manualId)]).then(([codigos, params]) => {
-    nuevaConsulta();
-    modoManual = true;
-    equipoContexto = equipoNombre;
-    showTab('chat');
-    const nCod = (codigos||[]).length;
-    const nPar = (params||[]).length;
-    appendMsg('bot',
-      `📖 Contexto cargado: <strong>${equipoNombre}</strong><br>
-       Tengo acceso a <strong>${nCod} códigos de fallo</strong> y <strong>${nPar} parámetros</strong> de su manual.<br>
-       Describe el síntoma o pregúntame sobre cualquier parámetro o código de error.`
-    );
-    const codsTexto = (codigos||[]).slice(0,50).map(c => `${c.codigo}: ${c.descripcion}${c.causa?' | Causa: '+c.causa:''}${c.solucion?' | Solución: '+c.solucion:''}`).join('\n');
-    const parsTexto = (params||[]).slice(0,50).map(p => `${p.parametro} ${p.nombre}: rango ${p.rango||'—'}, defecto ${p.defecto||'—'}. ${p.descripcion||''}`).join('\n');
-    const contexto = `CONTEXTO DEL EQUIPO EN ESTA CONVERSACIÓN:
-Equipo: ${equipoNombre}
-${codsTexto ? 'CÓDIGOS DE FALLO DEL MANUAL:\n'+codsTexto : ''}
-${parsTexto ? 'PARÁMETROS DEL MANUAL (primeros 50):\n'+parsTexto : ''}
-Usa este contexto para responder preguntas técnicas sobre este equipo. Si el técnico pregunta por un código de error o parámetro, búscalo aquí primero antes de cualquier otra cosa.`;
-    chatHistory = [
-      { role: 'user', text: contexto },
-      { role: 'model', text: `Entendido. Tengo cargado el manual del ${equipoNombre} con ${nCod} códigos de fallo y ${nPar} parámetros. ¿En qué puedo ayudarte?` }
-    ];
-  }).catch(() => {
-    nuevaConsulta();
-    modoManual = true;
-    equipoContexto = equipoNombre;
-    showTab('chat');
-    appendMsg('bot', `📖 Equipo: <strong>${equipoNombre}</strong>. Describe el síntoma y te ayudo.`);
-  });
-}
-// ====================================================================
-
-// ============ MANUALES (Fase 1: códigos de fallo + parámetros) ======
-let manualExtraido = null;   // datos propuestos por la IA, pendientes de guardar
-let manualPaginas = null;    // páginas del PDF en curso
-let manualNombre = '';       // nombre del archivo en curso
-
-function mostrarProcesando(txt) {
-  document.getElementById('procesando-txt').textContent = txt || 'Procesando, espera…';
-  document.getElementById('procesando-modal').classList.remove('hidden');
-}
-function ocultarProcesando() {
-  document.getElementById('procesando-modal').classList.add('hidden');
-}
-
-// Trocea un texto largo en fragmentos de ~tamaño, sin cortar palabras a lo bruto.
-function trocearTexto(texto, tam) {
-  const trozos = [];
-  for (let i = 0; i < texto.length; i += tam) trozos.push(texto.slice(i, i + tam));
-  return trozos;
-}
-
-// Paso 1: al elegir archivo, leer páginas y preguntar qué contiene.
-async function importarManual(file) {
-  document.getElementById('manual-pdf-input').value = '';
-  if (!file) return;
-  if (typeof pdfjsLib === 'undefined') { alert('No se pudo cargar el lector de PDF.'); return; }
-  mostrarProcesando('Leyendo el PDF…');
-  try {
-    manualPaginas = await extraerPaginasPDF(file);
-    manualNombre = file.name.replace(/\.pdf$/i, '');
-    ocultarProcesando();
-    const total = manualPaginas.join('\n');
-    if (!total || total.length < 40) {
-      alert('No se pudo leer texto del PDF (puede ser un escaneo sin texto).');
-      return;
-    }
-    document.getElementById('tipo-pdf-modal').classList.remove('hidden');
-  } catch(e) {
-    ocultarProcesando();
-    alert('Error al leer el PDF: ' + e.message);
-  }
-}
-
-// Paso 2: procesar según el tipo elegido, en tandas para no cortar listas largas.
-async function procesarManual(tipo) {
-  document.getElementById('tipo-pdf-modal').classList.add('hidden');
-  const textoTotal = manualPaginas.join('\n');
-  const TAM = 12000; // pequeño para no superar el timeout de la Edge Function gratuita
-  const DELAY = 800; // ms entre llamadas para no saturar
-  const trozos = trocearTexto(textoTotal, TAM);
-
-  manualExtraido = { marca:'', modelo:'', tipo:'', nombre: manualNombre, codigos: [], parametros: [] };
-
-  try {
-    // Identificación: del principio, una sola vez.
-    mostrarProcesando('Identificando el equipo…');
-    const ident = await callGeminiDirecto(`Del inicio de este manual técnico industrial, identifica marca, modelo y tipo de equipo. Responde SOLO JSON: {"marca":"...","modelo":"...","tipo":"..."}. Si algo no aparece, cadena vacía.\n\n${textoTotal.slice(0,8000)}`);
-    try { const d = JSON.parse(ident.replace(/```json|```/g,'').trim()); manualExtraido.marca=d.marca||''; manualExtraido.modelo=d.modelo||''; manualExtraido.tipo=d.tipo||''; } catch(e) {}
-
-    for (let t = 0; t < trozos.length; t++) {
-      const parte = `(parte ${t+1} de ${trozos.length})`;
-      if (t > 0) await new Promise(r => setTimeout(r, DELAY));
-
-      if (tipo === 'codigos' || tipo === 'ambos') {
-        mostrarProcesando(`Extrayendo códigos de fallo ${parte}…`);
-        const r = await callGeminiDirecto(`Extrae de este fragmento de manual TODOS los códigos de fallo/error/trip con descripción, causa y solución. Responde SOLO JSON sin markdown: {"codigos":[{"codigo":"...","descripcion":"...","causa":"...","solucion":"..."}]}. No inventes. Si no hay, array vacío.\n\n${trozos[t]}`);
-        try { const d = JSON.parse(r.replace(/```json|```/g,'').trim()); if (Array.isArray(d.codigos)) manualExtraido.codigos.push(...d.codigos); } catch(e) {}
-        if (t < trozos.length-1) await new Promise(r => setTimeout(r, DELAY));
-      }
-
-      if (tipo === 'parametros' || tipo === 'ambos') {
-        mostrarProcesando(`Extrayendo parámetros ${parte}…`);
-        const r = await callGeminiDirecto(`Extrae de este fragmento de manual TODAS las listas de parámetros con nombre, rango, valor por defecto y descripción. Responde SOLO JSON sin markdown: {"parametros":[{"parametro":"...","nombre":"...","rango":"...","defecto":"...","descripcion":"..."}]}. No inventes. Si no hay, array vacío.\n\n${trozos[t]}`);
-        try { const d = JSON.parse(r.replace(/```json|```/g,'').trim()); if (Array.isArray(d.parametros)) manualExtraido.parametros.push(...d.parametros); } catch(e) {}
-      }
-    }
-
-    // Quitar duplicados evidentes (mismo código / mismo parámetro)
-    manualExtraido.codigos = dedupe(manualExtraido.codigos, 'codigo');
-    manualExtraido.parametros = dedupe(manualExtraido.parametros, 'parametro');
-
-    ocultarProcesando();
-    renderManualModal();
-    document.getElementById('manual-modal').classList.remove('hidden');
-  } catch(e) {
-    ocultarProcesando();
-    alert('Error al procesar el manual: ' + e.message);
-  }
-}
-
-function dedupe(arr, campo) {
-  const vistos = new Set();
-  return arr.filter(x => {
-    const k = (x[campo] || '').trim().toLowerCase();
-    if (!k) return true;
-    if (vistos.has(k)) return false;
-    vistos.add(k); return true;
-  });
-}
-
-
-function renderManualModal() {
-  const d = manualExtraido;
-  document.getElementById('man-marca').value = d.marca;
-  document.getElementById('man-modelo').value = d.modelo;
-  document.getElementById('man-tipo').value = d.tipo;
-  document.getElementById('man-nombre').value = d.nombre;
-  document.getElementById('man-msg').textContent = '';
-  document.getElementById('man-cod-count').textContent = d.codigos.length;
-  document.getElementById('man-par-count').textContent = d.parametros.length;
-
-  const inp = (cls, i, val, ph) => `<input type="text" class="${cls}" data-i="${i}" value="${(val||'').replace(/"/g,'&quot;')}" placeholder="${ph}" style="font-size:12px">`;
-
-  document.getElementById('man-codigos').innerHTML = d.codigos.map((c, i) => `
-    <div style="display:grid;grid-template-columns:80px 1fr;gap:5px;border:1px solid var(--border);border-radius:6px;padding:6px">
-      ${inp('mc-codigo', i, c.codigo, 'Código')}
-      <div style="display:flex;flex-direction:column;gap:4px">
-        ${inp('mc-desc', i, c.descripcion, 'Descripción')}
-        ${inp('mc-causa', i, c.causa, 'Causa')}
-        ${inp('mc-sol', i, c.solucion, 'Solución')}
-      </div>
-    </div>`).join('') || '<div style="font-size:12px;color:var(--text3)">No se detectaron códigos.</div>';
-
-  document.getElementById('man-parametros').innerHTML = d.parametros.map((p, i) => `
-    <div style="display:grid;grid-template-columns:90px 1fr;gap:5px;border:1px solid var(--border);border-radius:6px;padding:6px">
-      ${inp('mp-param', i, p.parametro, 'Parám.')}
-      <div style="display:flex;flex-direction:column;gap:4px">
-        ${inp('mp-nombre', i, p.nombre, 'Nombre')}
-        <div style="display:flex;gap:4px">${inp('mp-rango', i, p.rango, 'Rango')}${inp('mp-defecto', i, p.defecto, 'Defecto')}</div>
-        ${inp('mp-desc', i, p.descripcion, 'Descripción')}
-      </div>
-    </div>`).join('') || '<div style="font-size:12px;color:var(--text3)">No se detectaron parámetros.</div>';
-}
-
-function cerrarManualModal() {
-  document.getElementById('manual-modal').classList.add('hidden');
-  manualExtraido = null;
-}
-
-async function confirmarGuardarManual() {
-  const marca = document.getElementById('man-marca').value.trim();
-  const modelo = document.getElementById('man-modelo').value.trim();
-  const msg = document.getElementById('man-msg');
-  if (!marca && !modelo) { msg.textContent = 'Indica al menos marca o modelo.'; return; }
-
-  const val = (cls, i) => { const el = document.querySelector(`.${cls}[data-i="${i}"]`); return el ? el.value.trim() : ''; };
-  const btn = document.getElementById('man-save-btn');
-  try {
-    btn.disabled = true;
-    // 1) Crear el manual y obtener su id
-    const creado = await insertManual({
-      marca, modelo,
-      tipo: document.getElementById('man-tipo').value.trim() || null,
-      nombre: document.getElementById('man-nombre').value.trim() || null
-    });
-    const manualId = Array.isArray(creado) ? creado[0].id : creado.id;
-
-    // 2) Guardar códigos
-    const codigos = manualExtraido.codigos.map((_, i) => ({
-      manual_id: manualId,
-      codigo: val('mc-codigo', i) || null,
-      descripcion: val('mc-desc', i) || null,
-      causa: val('mc-causa', i) || null,
-      solucion: val('mc-sol', i) || null
-    })).filter(c => c.codigo || c.descripcion);
-    await insertCodigos(codigos);
-
-    // 3) Guardar parámetros
-    const parametros = manualExtraido.parametros.map((_, i) => ({
-      manual_id: manualId,
-      parametro: val('mp-param', i) || null,
-      nombre: val('mp-nombre', i) || null,
-      rango: val('mp-rango', i) || null,
-      defecto: val('mp-defecto', i) || null,
-      descripcion: val('mp-desc', i) || null
-    })).filter(p => p.parametro || p.nombre);
-    await insertParametros(parametros);
-
-    // 4) Generar chunks + embeddings del texto completo (búsqueda inteligente)
-    mostrarProcesando('Generando búsqueda inteligente del manual…');
-    try {
-      await generarYGuardarChunks(manualId, manualPaginas ? manualPaginas.join('\n') : '');
-    } catch(e) {
-      console.warn('Embeddings fallaron (no crítico):', e.message);
-      // No bloqueamos el guardado si los embeddings fallan
-    }
-
-    cerrarManualModal();
-    await loadManuales();
-    document.getElementById('filter-manual').value = manualId;
-    verManual();
-  } catch(e) {
-    msg.textContent = 'Error al guardar: ' + e.message;
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-async function loadManuales() {
-  try {
-    const list = await getManuales() || [];
-    const sel = document.getElementById('filter-manual');
-    sel.innerHTML = '<option value="">Selecciona un manual…</option>' +
-      list.map(m => `<option value="${m.id}">${[m.marca, m.modelo].filter(Boolean).join(' ')}${m.tipo ? ' ('+m.tipo+')' : ''}</option>`).join('');
-  } catch(e) { /* silencioso */ }
-}
-
-async function verManual() {
-  const id = document.getElementById('filter-manual').value;
-  const cont = document.getElementById('manual-detalle');
-  if (!id) { cont.innerHTML = '<div class="empty-state">Sube un manual o selecciona uno para ver sus códigos de fallo y parámetros.</div>'; return; }
-  cont.innerHTML = '<div class="empty-state">Cargando…</div>';
-  try {
-    const [codigos, parametros] = await Promise.all([getCodigos(id), getParametros(id)]);
-    const nombreManual = document.getElementById('filter-manual').selectedOptions[0]?.textContent || 'Manual';
-    let html = `<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-      <button class="add-btn" onclick="abrirChatManual('${id}','${nombreManual.replace(/'/g,'')}');document.getElementById('manual-chat-titulo').textContent='${nombreManual.replace(/'/g,'')}'" >💬 Consultar este manual</button>
-      <button class="del-btn" onclick="eliminarManual('${id}')">🗑 Eliminar manual</button>
-    </div>`;
-
-    html += `<h3 style="font-size:15px;margin:10px 0 6px">Códigos de fallo (${(codigos||[]).length})</h3>`;
-    if ((codigos||[]).length) {
-      html += (codigos).map(c => `
-        <div class="averia-card">
-          <div class="averia-sintoma">🔴 <strong>${c.codigo || '—'}</strong> ${c.descripcion ? '· ' + c.descripcion : ''}</div>
-          ${c.causa ? `<div class="averia-causa">Causa: ${c.causa}</div>` : ''}
-          ${c.solucion ? `<div class="averia-sol">🔧 ${c.solucion}</div>` : ''}
-        </div>`).join('');
-    } else { html += '<div style="font-size:13px;color:var(--text3);margin-bottom:10px">Sin códigos guardados.</div>'; }
-
-    html += `<h3 style="font-size:15px;margin:16px 0 6px">Parámetros (${(parametros||[]).length})</h3>`;
-    if ((parametros||[]).length) {
-      html += (parametros).map(p => `
-        <div class="averia-card">
-          <div class="averia-sintoma"><strong>${p.parametro || '—'}</strong> ${p.nombre ? '· ' + p.nombre : ''}</div>
-          <div class="averia-causa">${[p.rango ? 'Rango: '+p.rango : '', p.defecto ? 'Defecto: '+p.defecto : ''].filter(Boolean).join(' · ')}</div>
-          ${p.descripcion ? `<div class="averia-sol">${p.descripcion}</div>` : ''}
-        </div>`).join('');
-    } else { html += '<div style="font-size:13px;color:var(--text3)">Sin parámetros guardados.</div>'; }
-
-    cont.innerHTML = html;
-  } catch(e) {
-    cont.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
-  }
-}
-
-async function eliminarManual(id) {
-  if (!pedirPassword()) return;
-  if (!confirm('¿Eliminar este manual y todos sus datos? No se puede deshacer.')) return;
-  try {
-    const b = await deleteManual(id);
-    if (!b || !b.length) { alert('No se pudo eliminar (revisa permisos RLS de la tabla manuales).'); return; }
-    document.getElementById('filter-manual').value = '';
-    await loadManuales();
-    verManual();
-  } catch(e) { alert('Error: ' + e.message); }
-}
-// ====================================================================
-
-// ============ RAG: CHUNKS + EMBEDDINGS + CHAT DE MANUAL ==============
-
-// Trocea el texto del manual y guarda cada trozo con su embedding en Supabase.
-async function generarYGuardarChunks(manualId, textoCompleto) {
-  if (!textoCompleto || textoCompleto.length < 50) return;
-  // Borrar chunks anteriores de este manual (re-proceso)
-  await deleteChunks(manualId);
-  // Trocear en bloques de ~800 caracteres con solape de ~100
-  const TAM = 800; const SOLAPE = 100;
-  const trozos = [];
-  for (let i = 0; i < textoCompleto.length; i += TAM - SOLAPE) {
-    const t = textoCompleto.slice(i, i + TAM).trim();
-    if (t.length > 40) trozos.push(t);
-  }
-  mostrarProcesando(`Generando búsqueda inteligente (0 / ${trozos.length} bloques)…`);
-  const rows = [];
-  for (let i = 0; i < trozos.length; i++) {
-    if (i % 10 === 0) mostrarProcesando(`Generando búsqueda inteligente (${i} / ${trozos.length} bloques)…`);
-    try {
-      const emb = await generarEmbedding(trozos[i]);
-      rows.push({ manual_id: manualId, contenido: trozos[i], embedding: emb });
-    } catch(e) { /* saltar si falla un trozo */ }
-    // Pequeña pausa cada 20 bloques para no saturar la API
-    if (i > 0 && i % 20 === 0) await new Promise(r => setTimeout(r, 500));
-  }
-  await insertChunks(rows);
-}
-
-// ---- Chat RAG del manual ----
-let manualChatId = null;      // id del manual activo en el chat
-let manualChatNombre = '';    // nombre del manual activo
-let manualChatHistory = [];   // historial del chat del manual
-
-function abrirChatManual(manualId, nombreManual) {
-  manualChatId = manualId;
-  manualChatNombre = nombreManual;
-  manualChatHistory = [];
-  const chat = document.getElementById('manual-chat');
-  const msgs = document.getElementById('manual-chat-msgs');
-  msgs.innerHTML = `
-    <div class="msg bot">
-      <div class="msg-avatar">📖</div>
-      <div class="msg-content">Estoy listo para responder preguntas sobre <strong>${nombreManual}</strong>. Pregúntame sobre códigos de error, parámetros, procedimientos o cualquier cosa del manual.</div>
-    </div>`;
-  chat.style.display = 'flex';
-  document.getElementById('manual-chat-input').focus();
-}
-
-function cerrarChatManual() {
-  document.getElementById('manual-chat').style.display = 'none';
-  manualChatId = null;
-  manualChatHistory = [];
-}
-
-function appendManualMsg(role, html) {
-  const msgs = document.getElementById('manual-chat-msgs');
-  const div = document.createElement('div');
-  div.className = `msg ${role}`;
-  div.innerHTML = `<div class="msg-avatar">${role === 'bot' ? '📖' : '👤'}</div><div class="msg-content">${html}</div>`;
-  msgs.appendChild(div);
-  msgs.scrollTop = msgs.scrollHeight;
-}
-
-async function sendManualMsg() {
-  const inp = document.getElementById('manual-chat-input');
-  const text = inp.value.trim();
-  if (!text || !manualChatId) return;
-  inp.value = '';
-  appendManualMsg('user', text);
-
-  const btn = document.getElementById('manual-chat-send');
-  btn.disabled = true;
-  const typing = document.createElement('div');
-  typing.className = 'msg bot'; typing.id = 'manual-typing';
-  typing.innerHTML = '<div class="msg-avatar">📖</div><div class="msg-content typing-indicator"><span></span><span></span><span></span></div>';
-  document.getElementById('manual-chat-msgs').appendChild(typing);
-
-  try {
-    // 1) Convertir pregunta en embedding
-    const qEmb = await generarEmbedding(text);
-
-    // 2) Buscar chunks relevantes en Supabase
-    const chunks = await buscarChunks(qEmb, manualChatId, 5) || [];
-    const contexto = chunks.map(c => c.contenido).join('\n\n---\n\n');
-
-    if (!contexto) {
-      document.getElementById('manual-typing')?.remove();
-      appendManualMsg('bot', 'No encontré información relevante en el manual para esa pregunta. Intenta reformularla.');
-      return;
-    }
-
-    // 3) Llamar a Gemini con el contexto del manual
-    const prompt = `Eres un asistente técnico experto. Responde la pregunta del técnico basándote EXCLUSIVAMENTE en los fragmentos del manual que te proporciono. Si la respuesta no está en el manual, dilo claramente en vez de inventar.
-
-FRAGMENTOS DEL MANUAL (${manualChatNombre}):
-${contexto}
-
-PREGUNTA DEL TÉCNICO: ${text}
-
-INSTRUCCIONES:
-- Responde en español, de forma clara y concisa.
-- Si hay códigos de error o parámetros en los fragmentos, cítalos exactamente.
-- Si la información no está en los fragmentos, di "No encuentro esa información en el manual".
-- No inventes datos que no estén en el manual.`;
-
-    const respuesta = await callGeminiDirecto(prompt);
-    document.getElementById('manual-typing')?.remove();
-    appendManualMsg('bot', respuesta.replace(/\n/g, '<br>'));
-
-    // Guardar historial para contexto de seguimiento
-    manualChatHistory.push({ role: 'user', text });
-    manualChatHistory.push({ role: 'model', text: respuesta });
-    if (manualChatHistory.length > 12) manualChatHistory = manualChatHistory.slice(-12);
-
-  } catch(e) {
-    document.getElementById('manual-typing')?.remove();
-    appendManualMsg('bot', `⚠️ Error: ${e.message}`);
-  } finally {
-    btn.disabled = false;
-  }
-}
-// ====================================================================
 
 // ============ IMPORTAR PARTE DE TRABAJO (PDF) =======================
 let partesDetectados = []; // averías extraídas del PDF pendientes de guardar
@@ -2166,23 +1474,6 @@ function removeTyping() {
   if (t) t.remove();
 }
 
-// Llama a Gemini DIRECTAMENTE (sin pasar por Supabase) usando la key del Config.
-// Solo para operaciones largas como el procesado de manuales, donde el timeout
-// de la Edge Function gratuita de Supabase sería un problema.
-async function callGeminiDirecto(prompt) {
-  const key = getCfg().gemini;
-  if (!key) throw new Error('Para importar manuales necesitas configurar la Gemini API Key en la pestaña ⚙ Config.');
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error?.message || 'Error Gemini');
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-}
-
 async function callGemini(prompt, imageBase64, imageMime, history) {
   const c = getCfg();
 
@@ -2232,8 +1523,6 @@ async function callBraveSearch(query) {
 // en pantalla, dejando solo el saludo inicial. Úsalo al pasar a otra avería.
 function nuevaConsulta() {
   chatHistory = [];
-  modoManual = false;
-  equipoContexto = '';
   currentConvId = null;
   currentConvMsgs = [];
   removeImage();
@@ -2292,8 +1581,8 @@ Responde SOLO en este formato JSON sin markdown:
         appendMsg('bot', `📷 <strong>Imagen analizada</strong><br>Código detectado: <code>${errorCode || 'no detectado'}</code>${model ? `<br>Equipo: ${model}` : ''}${desc ? `<br>${desc}` : ''}`);
         showTyping();
 
-        // 2. Búsqueda web automática con el código (solo en modo normal)
-        if (errorCode && !modoManual) {
+        // 2. Búsqueda web automática con el código
+        if (errorCode) {
           const searchQuery = model ? `${model} error ${errorCode} solución` : `variador error ${errorCode} solución`;
           webResults = await callBraveSearch(searchQuery);
         }
@@ -2302,13 +1591,9 @@ Responde SOLO en este formato JSON sin markdown:
       }
     }
 
-    // 3. Obtener histórico de averías (solo en modo normal, no en modo manual)
+    // 3. Obtener histórico de averías
     let averias = [];
-    if (!modoManual) {
-      try {
-        averias = await getAverias(machineId || null, almacen || null) || [];
-      } catch(e) { console.warn(e); }
-    }
+    try { averias = await getAverias(machineId || null, almacen || null) || []; } catch(e) { console.warn(e); }
 
     // 4. Construir contexto del histórico
     const historicoTexto = averias.length
@@ -2319,20 +1604,10 @@ Responde SOLO en este formato JSON sin markdown:
       : 'No hay averías previas registradas.';
 
     // 5. Prompt principal
+    const esPrimera = chatHistory.length === 0;
     let diagPrompt;
-
-    if (modoManual) {
-      // MODO MANUAL: la IA ya tiene el manual en chatHistory.
-      // Solo añadimos la pregunta actual. Sin histórico de averías ni Brave.
-      diagPrompt = `PREGUNTA DEL TÉCNICO sobre el ${equipoContexto}: "${text || `(imagen con código de error: ${errorCode || 'no detectado'})`}"
-
-${errorCode ? `Código detectado en la imagen: ${errorCode}. Búscalo en los códigos de fallo del manual que tienes en el contexto.` : ''}
-Responde basándote en el manual del equipo que tienes cargado. Si la respuesta está en los códigos de fallo o parámetros, cítala. Sé conciso y práctico. Responde en español.`;
-    } else {
-      // MODO NORMAL: diagnóstico con histórico de averías + búsqueda web.
-      const esPrimera = chatHistory.length === 0;
-      if (esPrimera) {
-        diagPrompt = `Eres un asistente experto en mantenimiento industrial. Tu función es ayudar a técnicos a diagnosticar averías. Mantén el contexto de toda la conversación: el técnico te hará preguntas de seguimiento y debes recordar lo ya hablado sin pedir que te lo repitan.
+    if (esPrimera) {
+      diagPrompt = `Eres un asistente experto en mantenimiento industrial. Tu función es ayudar a técnicos a diagnosticar averías. Mantén el contexto de toda la conversación: el técnico te hará preguntas de seguimiento y debes recordar lo ya hablado sin pedir que te lo repitan.
 
 CONSULTA DEL TÉCNICO: "${text || `(imagen con código de error: ${errorCode || 'no detectado'})`}"
 
@@ -2349,13 +1624,12 @@ INSTRUCCIONES:
 4. Sé conciso y práctico — habla como un técnico senior a un técnico.
 5. Si hay resultados web relevantes, menciónalos.
 6. Responde en español.`;
-      } else {
-        diagPrompt = `PREGUNTA DE SEGUIMIENTO DEL TÉCNICO: "${text || `(imagen con código de error: ${errorCode || 'no detectado'})`}"
+    } else {
+      diagPrompt = `PREGUNTA DE SEGUIMIENTO DEL TÉCNICO: "${text || `(imagen con código de error: ${errorCode || 'no detectado'})`}"
 
 ${webResults.length ? `NUEVOS RESULTADOS WEB (código ${errorCode}):
 ${webResults.map(r => `- ${r.title}: ${r.description} (${r.url})`).join('\n')}
 ` : ''}Responde teniendo en cuenta TODO lo que ya hemos hablado en esta conversación. Sé conciso y práctico, como un técnico senior. Responde en español.`;
-      }
     }
 
     const respuesta = await callGemini(diagPrompt, null, null, chatHistory);
@@ -2408,7 +1682,6 @@ function showTab(name) {
   document.getElementById('tab-' + name).classList.add('active');
   event.target.classList.add('active');
   if (name === 'historico') loadHistorico();
-  if (name === 'manuales') loadManuales();
 }
 
 // ===================== INIT =====================
