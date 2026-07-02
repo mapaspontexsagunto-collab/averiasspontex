@@ -405,6 +405,10 @@
         <div class="config-card">
           <h2>Configuración</h2>
           <div class="config-item">
+            <label>Gemini API Key <span style="font-size:11px;color:var(--text3)">(solo para importar manuales — no se comparte)</span></label>
+            <input type="password" id="cfg-gemini" placeholder="AIza...">
+          </div>
+          <div class="config-item">
             <label>Supabase URL</label>
             <input type="text" id="cfg-supabase-url" placeholder="https://xxx.supabase.co">
           </div>
@@ -628,12 +632,15 @@ const DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzd
 
 function getCfg() {
   return {
+    gemini: localStorage.getItem('av_gemini') || '',
     url: localStorage.getItem('av_sb_url') || DEFAULT_SUPABASE_URL,
     key: localStorage.getItem('av_sb_key') || DEFAULT_SUPABASE_KEY,
   };
 }
 
 function saveConfig() {
+  const g = document.getElementById('cfg-gemini');
+  if (g) localStorage.setItem('av_gemini', g.value.trim());
   localStorage.setItem('av_sb_url', document.getElementById('cfg-supabase-url').value.trim() || DEFAULT_SUPABASE_URL);
   localStorage.setItem('av_sb_key', document.getElementById('cfg-supabase-key').value.trim() || DEFAULT_SUPABASE_KEY);
   document.getElementById('cfg-msg').classList.add('show');
@@ -643,6 +650,8 @@ function saveConfig() {
 
 function loadConfigUI() {
   const c = getCfg();
+  const g = document.getElementById('cfg-gemini');
+  if (g) g.value = c.gemini;
   document.getElementById('cfg-supabase-url').value = c.url;
   document.getElementById('cfg-supabase-key').value = c.key;
 }
@@ -1186,7 +1195,8 @@ async function importarManual(file) {
 async function procesarManual(tipo) {
   document.getElementById('tipo-pdf-modal').classList.add('hidden');
   const textoTotal = manualPaginas.join('\n');
-  const TAM = 45000; // tamaño por tanda
+  const TAM = 12000; // pequeño para no superar el timeout de la Edge Function gratuita
+  const DELAY = 800; // ms entre llamadas para no saturar
   const trozos = trocearTexto(textoTotal, TAM);
 
   manualExtraido = { marca:'', modelo:'', tipo:'', nombre: manualNombre, codigos: [], parametros: [] };
@@ -1194,21 +1204,23 @@ async function procesarManual(tipo) {
   try {
     // Identificación: del principio, una sola vez.
     mostrarProcesando('Identificando el equipo…');
-    const ident = await callGemini(`Del inicio de este manual técnico industrial, identifica marca, modelo y tipo de equipo. Responde SOLO JSON: {"marca":"...","modelo":"...","tipo":"..."}. Si algo no aparece, cadena vacía.\n\n${textoTotal.slice(0,8000)}`, null, null, null);
+    const ident = await callGeminiDirecto(`Del inicio de este manual técnico industrial, identifica marca, modelo y tipo de equipo. Responde SOLO JSON: {"marca":"...","modelo":"...","tipo":"..."}. Si algo no aparece, cadena vacía.\n\n${textoTotal.slice(0,8000)}`);
     try { const d = JSON.parse(ident.replace(/```json|```/g,'').trim()); manualExtraido.marca=d.marca||''; manualExtraido.modelo=d.modelo||''; manualExtraido.tipo=d.tipo||''; } catch(e) {}
 
     for (let t = 0; t < trozos.length; t++) {
       const parte = `(parte ${t+1} de ${trozos.length})`;
+      if (t > 0) await new Promise(r => setTimeout(r, DELAY));
 
       if (tipo === 'codigos' || tipo === 'ambos') {
         mostrarProcesando(`Extrayendo códigos de fallo ${parte}…`);
-        const r = await callGemini(`Extrae de este fragmento de manual TODOS los códigos de fallo/error/trip con descripción, causa y solución. Responde SOLO JSON sin markdown: {"codigos":[{"codigo":"...","descripcion":"...","causa":"...","solucion":"..."}]}. No inventes. Si no hay, array vacío.\n\n${trozos[t]}`, null, null, null);
+        const r = await callGeminiDirecto(`Extrae de este fragmento de manual TODOS los códigos de fallo/error/trip con descripción, causa y solución. Responde SOLO JSON sin markdown: {"codigos":[{"codigo":"...","descripcion":"...","causa":"...","solucion":"..."}]}. No inventes. Si no hay, array vacío.\n\n${trozos[t]}`);
         try { const d = JSON.parse(r.replace(/```json|```/g,'').trim()); if (Array.isArray(d.codigos)) manualExtraido.codigos.push(...d.codigos); } catch(e) {}
+        if (t < trozos.length-1) await new Promise(r => setTimeout(r, DELAY));
       }
 
       if (tipo === 'parametros' || tipo === 'ambos') {
         mostrarProcesando(`Extrayendo parámetros ${parte}…`);
-        const r = await callGemini(`Extrae de este fragmento de manual TODAS las listas de parámetros con nombre, rango, valor por defecto y descripción. Responde SOLO JSON sin markdown: {"parametros":[{"parametro":"...","nombre":"...","rango":"...","defecto":"...","descripcion":"..."}]}. No inventes. Si no hay, array vacío.\n\n${trozos[t]}`, null, null, null);
+        const r = await callGeminiDirecto(`Extrae de este fragmento de manual TODAS las listas de parámetros con nombre, rango, valor por defecto y descripción. Responde SOLO JSON sin markdown: {"parametros":[{"parametro":"...","nombre":"...","rango":"...","defecto":"...","descripcion":"..."}]}. No inventes. Si no hay, array vacío.\n\n${trozos[t]}`);
         try { const d = JSON.parse(r.replace(/```json|```/g,'').trim()); if (Array.isArray(d.parametros)) manualExtraido.parametros.push(...d.parametros); } catch(e) {}
       }
     }
@@ -1793,6 +1805,23 @@ function showTyping() {
 function removeTyping() {
   const t = document.getElementById('typing-indicator');
   if (t) t.remove();
+}
+
+// Llama a Gemini DIRECTAMENTE (sin pasar por Supabase) usando la key del Config.
+// Solo para operaciones largas como el procesado de manuales, donde el timeout
+// de la Edge Function gratuita de Supabase sería un problema.
+async function callGeminiDirecto(prompt) {
+  const key = getCfg().gemini;
+  if (!key) throw new Error('Para importar manuales necesitas configurar la Gemini API Key en la pestaña ⚙ Config.');
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || 'Error Gemini');
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
 async function callGemini(prompt, imageBase64, imageMime, history) {
