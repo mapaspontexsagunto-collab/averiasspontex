@@ -218,6 +218,7 @@
       <button class="nav-btn" onclick="showTab('registro')">➕ Registrar</button>
       <button class="nav-btn" onclick="showTab('maquinas')">⚙️ Máquinas</button>
       <button class="nav-btn" onclick="showTab('historico')">📋 Histórico</button>
+      <button class="nav-btn" onclick="showTab('manuales')">📖 Manuales</button>
       <button class="nav-btn" onclick="showTab('config')">🔧 Config</button>
     </nav>
   </header>
@@ -379,6 +380,25 @@
       </div>
     </div>
 
+    <!-- MANUALES -->
+    <div class="tab" id="tab-manuales">
+      <div class="historico-wrap">
+        <div class="historico-header">
+          <h2>Manuales</h2>
+          <button class="add-btn" onclick="document.getElementById('manual-pdf-input').click()">📄 Subir manual (PDF)</button>
+          <input type="file" id="manual-pdf-input" accept="application/pdf" style="display:none" onchange="importarManual(this.files[0])">
+        </div>
+        <div class="historico-filters" style="margin-bottom:14px">
+          <select class="filter-select" id="filter-manual" onchange="verManual()">
+            <option value="">Selecciona un manual…</option>
+          </select>
+        </div>
+        <div id="manual-detalle">
+          <div class="empty-state">Sube un manual o selecciona uno para ver sus códigos de fallo y parámetros.</div>
+        </div>
+      </div>
+    </div>
+
     <!-- CONFIG -->
     <div class="tab" id="tab-config">
       <div class="config-wrap">
@@ -534,6 +554,46 @@
   </div>
 </div>
 
+<div class="modal-overlay hidden" id="manual-modal">
+  <div class="modal" style="max-width:640px">
+    <h3>📖 Datos extraídos del manual</h3>
+    <p style="font-size:12px;color:var(--text3);margin-top:4px">Revisa la marca/modelo/tipo y los datos extraídos. Puedes editar antes de guardar.</p>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-top:14px;max-height:64vh;overflow-y:auto">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:11px;color:var(--text2)">Marca</label>
+          <input type="text" id="man-marca">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:11px;color:var(--text2)">Modelo</label>
+          <input type="text" id="man-modelo">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:11px;color:var(--text2)">Tipo</label>
+          <input type="text" id="man-tipo" placeholder="variador, quemador...">
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;color:var(--text2)">Nombre del manual</label>
+        <input type="text" id="man-nombre">
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:600;margin:6px 0">Códigos de fallo (<span id="man-cod-count">0</span>)</div>
+        <div id="man-codigos" style="display:flex;flex-direction:column;gap:6px"></div>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:600;margin:6px 0">Parámetros (<span id="man-par-count">0</span>)</div>
+        <div id="man-parametros" style="display:flex;flex-direction:column;gap:6px"></div>
+      </div>
+      <div id="man-msg" style="font-size:12px;color:var(--danger)"></div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" onclick="cerrarManualModal()">Cancelar</button>
+      <button class="btn btn-primary" id="man-save-btn" onclick="confirmarGuardarManual()">Guardar manual</button>
+    </div>
+  </div>
+</div>
+
 <canvas id="canvas" style="display:none"></canvas>
 
 <script>
@@ -589,6 +649,31 @@ async function sbFetch(path, options = {}) {
 
 async function getMachines() {
   return await sbFetch('machines?select=*&order=name.asc');
+}
+
+// ---- Manuales ----
+async function getManuales() {
+  return await sbFetch('manuales?select=*&order=marca.asc');
+}
+async function insertManual(data) {
+  return await sbFetch('manuales', { method: 'POST', body: JSON.stringify(data), prefer: 'return=representation' });
+}
+async function insertCodigos(rows) {
+  if (!rows.length) return null;
+  return await sbFetch('manual_codigos', { method: 'POST', body: JSON.stringify(rows), prefer: 'return=minimal' });
+}
+async function insertParametros(rows) {
+  if (!rows.length) return null;
+  return await sbFetch('manual_parametros', { method: 'POST', body: JSON.stringify(rows), prefer: 'return=minimal' });
+}
+async function getCodigos(manualId) {
+  return await sbFetch(`manual_codigos?select=*&manual_id=eq.${manualId}&order=codigo.asc`);
+}
+async function getParametros(manualId) {
+  return await sbFetch(`manual_parametros?select=*&manual_id=eq.${manualId}&order=parametro.asc`);
+}
+async function deleteManual(id) {
+  return await sbFetch(`manuales?id=eq.${id}`, { method: 'DELETE', prefer: 'return=representation' });
 }
 
 async function getAverias(machineId, almacen) {
@@ -1033,6 +1118,211 @@ function toggleConvPanel(abrir) {
   if (abrir) { sb.classList.add('open'); ov.classList.add('open'); }
   else { sb.classList.remove('open'); ov.classList.remove('open'); }
 }
+
+// ============ MANUALES (Fase 1: códigos de fallo + parámetros) ======
+let manualExtraido = null; // datos propuestos por la IA, pendientes de guardar
+
+async function importarManual(file) {
+  document.getElementById('manual-pdf-input').value = '';
+  if (!file) return;
+  if (typeof pdfjsLib === 'undefined') { alert('No se pudo cargar el lector de PDF.'); return; }
+  showTyping();
+  try {
+    const texto = await extraerTextoPDF(file);
+    if (!texto || texto.length < 40) {
+      removeTyping();
+      alert('No se pudo leer texto del PDF (puede ser un escaneo sin texto).');
+      return;
+    }
+    // Los manuales son largos: limitamos el texto que mandamos a la IA para
+    // la extracción de tablas (los códigos/parámetros suelen estar en secciones
+    // concretas, pero enviamos una porción amplia).
+    const textoLimitado = texto.slice(0, 60000);
+
+    const prompt = `Eres un asistente que extrae información estructurada de manuales técnicos de equipos industriales (variadores, quemadores, PLC, etc.).
+
+Del siguiente texto de un manual, extrae:
+1. Identificación del equipo: marca, modelo y tipo.
+2. TODOS los códigos de fallo/error/trip que encuentres, con su descripción, causa y solución.
+3. TODAS las listas de parámetros que encuentres, con nombre, rango, valor por defecto y descripción.
+
+Responde SOLO con JSON válido sin markdown, con este formato exacto:
+{"marca":"...","modelo":"...","tipo":"...","codigos":[{"codigo":"...","descripcion":"...","causa":"...","solucion":"..."}],"parametros":[{"parametro":"...","nombre":"...","rango":"...","defecto":"...","descripcion":"..."}]}
+
+- Si un campo no aparece en el manual, pon cadena vacía "".
+- No inventes datos: extrae solo lo que esté en el texto.
+- Si no hay códigos o no hay parámetros, devuelve el array vacío correspondiente.
+
+TEXTO DEL MANUAL:
+${textoLimitado}`;
+
+    const resp = await callGemini(prompt, null, null, null);
+    removeTyping();
+
+    let data;
+    try { data = JSON.parse(resp.replace(/```json|```/g, '').trim()); }
+    catch(e) { alert('La IA no devolvió un formato válido. Inténtalo de nuevo.'); return; }
+
+    manualExtraido = {
+      marca: data.marca || '',
+      modelo: data.modelo || '',
+      tipo: data.tipo || '',
+      nombre: file.name.replace(/\.pdf$/i, ''),
+      codigos: Array.isArray(data.codigos) ? data.codigos : [],
+      parametros: Array.isArray(data.parametros) ? data.parametros : []
+    };
+    renderManualModal();
+    document.getElementById('manual-modal').classList.remove('hidden');
+  } catch(e) {
+    removeTyping();
+    alert('Error al procesar el manual: ' + e.message);
+  }
+}
+
+function renderManualModal() {
+  const d = manualExtraido;
+  document.getElementById('man-marca').value = d.marca;
+  document.getElementById('man-modelo').value = d.modelo;
+  document.getElementById('man-tipo').value = d.tipo;
+  document.getElementById('man-nombre').value = d.nombre;
+  document.getElementById('man-msg').textContent = '';
+  document.getElementById('man-cod-count').textContent = d.codigos.length;
+  document.getElementById('man-par-count').textContent = d.parametros.length;
+
+  const inp = (cls, i, val, ph) => `<input type="text" class="${cls}" data-i="${i}" value="${(val||'').replace(/"/g,'&quot;')}" placeholder="${ph}" style="font-size:12px">`;
+
+  document.getElementById('man-codigos').innerHTML = d.codigos.map((c, i) => `
+    <div style="display:grid;grid-template-columns:80px 1fr;gap:5px;border:1px solid var(--border);border-radius:6px;padding:6px">
+      ${inp('mc-codigo', i, c.codigo, 'Código')}
+      <div style="display:flex;flex-direction:column;gap:4px">
+        ${inp('mc-desc', i, c.descripcion, 'Descripción')}
+        ${inp('mc-causa', i, c.causa, 'Causa')}
+        ${inp('mc-sol', i, c.solucion, 'Solución')}
+      </div>
+    </div>`).join('') || '<div style="font-size:12px;color:var(--text3)">No se detectaron códigos.</div>';
+
+  document.getElementById('man-parametros').innerHTML = d.parametros.map((p, i) => `
+    <div style="display:grid;grid-template-columns:90px 1fr;gap:5px;border:1px solid var(--border);border-radius:6px;padding:6px">
+      ${inp('mp-param', i, p.parametro, 'Parám.')}
+      <div style="display:flex;flex-direction:column;gap:4px">
+        ${inp('mp-nombre', i, p.nombre, 'Nombre')}
+        <div style="display:flex;gap:4px">${inp('mp-rango', i, p.rango, 'Rango')}${inp('mp-defecto', i, p.defecto, 'Defecto')}</div>
+        ${inp('mp-desc', i, p.descripcion, 'Descripción')}
+      </div>
+    </div>`).join('') || '<div style="font-size:12px;color:var(--text3)">No se detectaron parámetros.</div>';
+}
+
+function cerrarManualModal() {
+  document.getElementById('manual-modal').classList.add('hidden');
+  manualExtraido = null;
+}
+
+async function confirmarGuardarManual() {
+  const marca = document.getElementById('man-marca').value.trim();
+  const modelo = document.getElementById('man-modelo').value.trim();
+  const msg = document.getElementById('man-msg');
+  if (!marca && !modelo) { msg.textContent = 'Indica al menos marca o modelo.'; return; }
+
+  const val = (cls, i) => { const el = document.querySelector(`.${cls}[data-i="${i}"]`); return el ? el.value.trim() : ''; };
+  const btn = document.getElementById('man-save-btn');
+  try {
+    btn.disabled = true;
+    // 1) Crear el manual y obtener su id
+    const creado = await insertManual({
+      marca, modelo,
+      tipo: document.getElementById('man-tipo').value.trim() || null,
+      nombre: document.getElementById('man-nombre').value.trim() || null
+    });
+    const manualId = Array.isArray(creado) ? creado[0].id : creado.id;
+
+    // 2) Guardar códigos
+    const codigos = manualExtraido.codigos.map((_, i) => ({
+      manual_id: manualId,
+      codigo: val('mc-codigo', i) || null,
+      descripcion: val('mc-desc', i) || null,
+      causa: val('mc-causa', i) || null,
+      solucion: val('mc-sol', i) || null
+    })).filter(c => c.codigo || c.descripcion);
+    await insertCodigos(codigos);
+
+    // 3) Guardar parámetros
+    const parametros = manualExtraido.parametros.map((_, i) => ({
+      manual_id: manualId,
+      parametro: val('mp-param', i) || null,
+      nombre: val('mp-nombre', i) || null,
+      rango: val('mp-rango', i) || null,
+      defecto: val('mp-defecto', i) || null,
+      descripcion: val('mp-desc', i) || null
+    })).filter(p => p.parametro || p.nombre);
+    await insertParametros(parametros);
+
+    cerrarManualModal();
+    await loadManuales();
+    document.getElementById('filter-manual').value = manualId;
+    verManual();
+  } catch(e) {
+    msg.textContent = 'Error al guardar: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function loadManuales() {
+  try {
+    const list = await getManuales() || [];
+    const sel = document.getElementById('filter-manual');
+    sel.innerHTML = '<option value="">Selecciona un manual…</option>' +
+      list.map(m => `<option value="${m.id}">${[m.marca, m.modelo].filter(Boolean).join(' ')}${m.tipo ? ' ('+m.tipo+')' : ''}</option>`).join('');
+  } catch(e) { /* silencioso */ }
+}
+
+async function verManual() {
+  const id = document.getElementById('filter-manual').value;
+  const cont = document.getElementById('manual-detalle');
+  if (!id) { cont.innerHTML = '<div class="empty-state">Sube un manual o selecciona uno para ver sus códigos de fallo y parámetros.</div>'; return; }
+  cont.innerHTML = '<div class="empty-state">Cargando…</div>';
+  try {
+    const [codigos, parametros] = await Promise.all([getCodigos(id), getParametros(id)]);
+    let html = `<div style="text-align:right;margin-bottom:10px"><button class="del-btn" onclick="eliminarManual('${id}')">🗑 Eliminar manual</button></div>`;
+
+    html += `<h3 style="font-size:15px;margin:10px 0 6px">Códigos de fallo (${(codigos||[]).length})</h3>`;
+    if ((codigos||[]).length) {
+      html += (codigos).map(c => `
+        <div class="averia-card">
+          <div class="averia-sintoma">🔴 <strong>${c.codigo || '—'}</strong> ${c.descripcion ? '· ' + c.descripcion : ''}</div>
+          ${c.causa ? `<div class="averia-causa">Causa: ${c.causa}</div>` : ''}
+          ${c.solucion ? `<div class="averia-sol">🔧 ${c.solucion}</div>` : ''}
+        </div>`).join('');
+    } else { html += '<div style="font-size:13px;color:var(--text3);margin-bottom:10px">Sin códigos guardados.</div>'; }
+
+    html += `<h3 style="font-size:15px;margin:16px 0 6px">Parámetros (${(parametros||[]).length})</h3>`;
+    if ((parametros||[]).length) {
+      html += (parametros).map(p => `
+        <div class="averia-card">
+          <div class="averia-sintoma"><strong>${p.parametro || '—'}</strong> ${p.nombre ? '· ' + p.nombre : ''}</div>
+          <div class="averia-causa">${[p.rango ? 'Rango: '+p.rango : '', p.defecto ? 'Defecto: '+p.defecto : ''].filter(Boolean).join(' · ')}</div>
+          ${p.descripcion ? `<div class="averia-sol">${p.descripcion}</div>` : ''}
+        </div>`).join('');
+    } else { html += '<div style="font-size:13px;color:var(--text3)">Sin parámetros guardados.</div>'; }
+
+    cont.innerHTML = html;
+  } catch(e) {
+    cont.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
+  }
+}
+
+async function eliminarManual(id) {
+  if (!pedirPassword()) return;
+  if (!confirm('¿Eliminar este manual y todos sus datos? No se puede deshacer.')) return;
+  try {
+    const b = await deleteManual(id);
+    if (!b || !b.length) { alert('No se pudo eliminar (revisa permisos RLS de la tabla manuales).'); return; }
+    document.getElementById('filter-manual').value = '';
+    await loadManuales();
+    verManual();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+// ====================================================================
 
 // ============ IMPORTAR PARTE DE TRABAJO (PDF) =======================
 let partesDetectados = []; // averías extraídas del PDF pendientes de guardar
@@ -1634,6 +1924,7 @@ function showTab(name) {
   document.getElementById('tab-' + name).classList.add('active');
   event.target.classList.add('active');
   if (name === 'historico') loadHistorico();
+  if (name === 'manuales') loadManuales();
 }
 
 // ===================== INIT =====================
