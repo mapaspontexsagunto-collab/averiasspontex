@@ -109,6 +109,14 @@
   .input-row textarea { flex: 1; min-height: 40px; max-height: 120px; padding: 10px 12px; font-size: 16px; }
   .icon-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--text2); border-radius: var(--radius); padding: 0; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-size: 16px; transition: all .15s; }
   .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .attach-wrap { position: relative; flex-shrink: 0; }
+  .averia-edit-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; font-size: 13px; padding: 3px 7px; line-height: 1; }
+  .averia-edit-btn:hover { border-color: var(--accent); }
+  .attach-wrap .icon-btn { font-size: 24px; font-weight: 300; line-height: 1; }
+  .attach-menu { position: absolute; bottom: 48px; left: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 4px 16px rgba(0,0,0,.35); display: flex; flex-direction: column; overflow: hidden; z-index: 40; min-width: 140px; }
+  .attach-menu button { background: none; border: none; color: var(--text); padding: 12px 14px; text-align: left; font-size: 14px; cursor: pointer; }
+  .attach-menu button:hover { background: var(--surface2); }
+  .attach-menu.hidden { display: none; }
   .send-btn { background: var(--accent); border: none; color: #000; border-radius: var(--radius); padding: 0 18px; height: 40px; font-weight: 700; font-size: 13px; cursor: pointer; flex-shrink: 0; transition: opacity .15s; }
   .send-btn:hover { opacity: .85; }
   .send-btn:disabled { opacity: .4; cursor: not-allowed; }
@@ -254,7 +262,10 @@
           <div class="chat-topbar">
             <button class="chat-menu-btn" onclick="toggleConvPanel(true)" title="Conversaciones">☰</button>
             <span class="chat-topbar-title">Asistente de averías</span>
-            <button class="chat-menu-btn" onclick="guardarSolucionIA()" title="Guardar solución en histórico">✅</button>
+            <div style="display:flex;gap:6px">
+              <button class="chat-menu-btn" onclick="guardarSolucionIA()" title="Guardar solución">✅</button>
+              <button class="chat-menu-btn" onclick="nuevaConsulta()" title="Nueva conversación">＋</button>
+            </div>
           </div>
           <div class="messages" id="messages">
             <div class="msg bot">
@@ -270,11 +281,15 @@
               </div>
             </div>
             <div class="input-row">
-              <button class="icon-btn" onclick="openCamera()" title="Cámara">📷</button>
-              <button class="icon-btn" onclick="document.getElementById('file-input').click()" title="Subir imagen">🖼</button>
+              <div class="attach-wrap">
+                <button class="icon-btn" onclick="toggleAttachMenu()" title="Adjuntar imagen">+</button>
+                <div class="attach-menu hidden" id="attach-menu">
+                  <button onclick="closeAttachMenu();openCamera()">📷 Cámara</button>
+                  <button onclick="closeAttachMenu();document.getElementById('file-input').click()">🖼 Galería</button>
+                </div>
+              </div>
               <input type="file" id="file-input" accept="image/*" style="display:none" onchange="handleFile(this)">
               <textarea id="chat-input" placeholder="Describe el síntoma..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}"></textarea>
-              <button class="icon-btn" onclick="nuevaConsulta()" title="Nueva consulta (olvidar lo anterior)">🗑</button>
               <button class="send-btn" onclick="sendMessage()" id="send-btn">Enviar</button>
             </div>
           </div>
@@ -477,6 +492,47 @@
   </div>
 </div>
 
+<div class="modal-overlay hidden" id="edit-modal">
+  <div class="modal" style="max-width:460px">
+    <h3>✏️ Editar avería</h3>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-top:14px;max-height:60vh;overflow-y:auto">
+      <input type="hidden" id="edit-id">
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:12px;color:var(--text2)">Máquina</label>
+        <select id="edit-machine"><option value="">— Sin máquina —</option></select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:12px;color:var(--text2)">Tipo</label>
+        <select id="edit-almacen">
+          <option value="Eléctrico">Eléctrico</option>
+          <option value="Mecánico">Mecánico</option>
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:12px;color:var(--text2)">Técnico</label>
+        <input type="text" id="edit-tecnico">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:12px;color:var(--text2)">Síntoma</label>
+        <textarea id="edit-sintoma" rows="2"></textarea>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:12px;color:var(--text2)">Causa</label>
+        <textarea id="edit-causa" rows="2"></textarea>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:12px;color:var(--text2)">Solución</label>
+        <textarea id="edit-solucion" rows="3"></textarea>
+      </div>
+      <div id="edit-msg" style="font-size:12px;color:var(--danger)"></div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" onclick="cerrarEditModal()">Cancelar</button>
+      <button class="btn btn-primary" id="edit-save-btn" onclick="confirmarEditarAveria()">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
 <canvas id="canvas" style="display:none"></canvas>
 
 <script>
@@ -545,6 +601,21 @@ async function insertAveria(data) {
   return await sbFetch('averias', {
     method: 'POST',
     body: JSON.stringify(data),
+    prefer: 'return=minimal'
+  });
+}
+
+async function updateAveria(id, data) {
+  return await sbFetch(`averias?id=eq.${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+    prefer: 'return=minimal'
+  });
+}
+
+async function deleteAveria(id) {
+  return await sbFetch(`averias?id=eq.${id}`, {
+    method: 'DELETE',
     prefer: 'return=minimal'
   });
 }
@@ -698,6 +769,80 @@ async function registrarAveria() {
 }
 
 // ===================== HISTÓRICO =====================
+// ============ EDICIÓN DEL HISTÓRICO (protegido con contraseña) ============
+const HIST_PASSWORD = 'Mapamsi01';
+let histAutorizado = false;      // se recuerda durante la sesión
+let historicoCache = [];         // últimas averías cargadas, para el editor
+
+// Pide la contraseña una vez por sesión. Devuelve true si está autorizado.
+function pedirPassword() {
+  if (histAutorizado) return true;
+  const p = prompt('Introduce la contraseña para editar el histórico:');
+  if (p === null) return false; // canceló
+  if (p === HIST_PASSWORD) { histAutorizado = true; return true; }
+  alert('Contraseña incorrecta.');
+  return false;
+}
+
+function editarAveria(id) {
+  if (!pedirPassword()) return;
+  const a = historicoCache.find(x => String(x.id) === String(id));
+  if (!a) return;
+  poblarSelectMaquinas('edit-machine');
+  document.getElementById('edit-id').value = a.id;
+  document.getElementById('edit-machine').value = a.machine_id || '';
+  document.getElementById('edit-almacen').value = a.almacen || 'Eléctrico';
+  document.getElementById('edit-tecnico').value = a.tecnico || '';
+  document.getElementById('edit-sintoma').value = a.sintoma || '';
+  document.getElementById('edit-causa').value = a.causa || '';
+  document.getElementById('edit-solucion').value = a.solucion || '';
+  document.getElementById('edit-msg').textContent = '';
+  document.getElementById('edit-modal').classList.remove('hidden');
+}
+
+function cerrarEditModal() {
+  document.getElementById('edit-modal').classList.add('hidden');
+}
+
+async function confirmarEditarAveria() {
+  const id = document.getElementById('edit-id').value;
+  const sintoma = document.getElementById('edit-sintoma').value.trim();
+  const tecnico = document.getElementById('edit-tecnico').value.trim();
+  const msg = document.getElementById('edit-msg');
+  if (!sintoma || !tecnico) { msg.textContent = 'Síntoma y técnico son obligatorios.'; return; }
+
+  const btn = document.getElementById('edit-save-btn');
+  try {
+    btn.disabled = true;
+    await updateAveria(id, {
+      machine_id: document.getElementById('edit-machine').value || null,
+      almacen: document.getElementById('edit-almacen').value,
+      tecnico,
+      sintoma,
+      causa: document.getElementById('edit-causa').value.trim() || null,
+      solucion: document.getElementById('edit-solucion').value.trim() || null
+    });
+    cerrarEditModal();
+    loadHistorico();
+  } catch(e) {
+    msg.textContent = 'Error al guardar: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function eliminarAveria(id) {
+  if (!pedirPassword()) return;
+  if (!confirm('¿Seguro que quieres eliminar esta avería del histórico? No se puede deshacer.')) return;
+  try {
+    await deleteAveria(id);
+    loadHistorico();
+  } catch(e) {
+    alert('Error al eliminar: ' + e.message);
+  }
+}
+// ==========================================================================
+
 async function loadHistorico() {
   const machineId = document.getElementById('filter-machine').value;
   const almacen = document.getElementById('filter-almacen').value;
@@ -709,6 +854,7 @@ async function loadHistorico() {
       list.innerHTML = '<div class="empty-state">No hay averías registradas con estos filtros.</div>';
       return;
     }
+    historicoCache = data; // guardamos para el editor
     list.innerHTML = data.map(a => `
       <div class="averia-card">
         <div class="averia-card-header">
@@ -716,7 +862,11 @@ async function loadHistorico() {
             <span class="averia-machine">${a.machines?.name || 'Sin máquina'}</span>
             <span class="badge ${a.almacen === 'Eléctrico' ? 'badge-e' : 'badge-m'}" style="margin-left:8px">${a.almacen ? '⚡ ' + a.almacen : ''}</span>
           </div>
-          <div class="averia-date">${new Date(a.created_at).toLocaleDateString('es-ES', {day:'2-digit',month:'2-digit',year:'numeric'})}</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="averia-date">${new Date(a.created_at).toLocaleDateString('es-ES', {day:'2-digit',month:'2-digit',year:'numeric'})}</div>
+            <button class="averia-edit-btn" onclick="editarAveria('${a.id}')" title="Editar">✏️</button>
+            <button class="averia-edit-btn" onclick="eliminarAveria('${a.id}')" title="Eliminar">🗑</button>
+          </div>
         </div>
         <div class="averia-sintoma">🔴 ${a.sintoma}</div>
         ${a.causa ? `<div class="averia-causa">✅ Causa: ${a.causa}</div>` : ''}
@@ -1124,6 +1274,18 @@ async function confirmarGuardarSolucion() {
 }
 // ====================================================================
 let cameraStream = null;
+
+function toggleAttachMenu() {
+  document.getElementById('attach-menu').classList.toggle('hidden');
+}
+function closeAttachMenu() {
+  document.getElementById('attach-menu').classList.add('hidden');
+}
+// Cerrar el menú al tocar fuera de él
+document.addEventListener('click', (e) => {
+  const wrap = document.querySelector('.attach-wrap');
+  if (wrap && !wrap.contains(e.target)) closeAttachMenu();
+});
 
 function removeImage() {
   currentImageBase64 = null;
