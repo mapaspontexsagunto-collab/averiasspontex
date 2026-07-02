@@ -594,6 +594,27 @@
   </div>
 </div>
 
+<div class="modal-overlay hidden" id="tipo-pdf-modal">
+  <div class="modal" style="max-width:380px">
+    <h3>¿Qué contiene este PDF?</h3>
+    <p style="font-size:12px;color:var(--text3);margin-top:4px">Elige qué debe extraer la IA de este documento.</p>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px">
+      <button class="btn btn-primary" onclick="procesarManual('codigos')">🔴 Códigos de fallo</button>
+      <button class="btn btn-primary" onclick="procesarManual('parametros')">⚙️ Parámetros</button>
+      <button class="btn btn-primary" onclick="procesarManual('ambos')">📖 Ambos</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('tipo-pdf-modal').classList.add('hidden')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="procesando-modal">
+  <div class="modal" style="max-width:320px;text-align:center">
+    <div style="font-size:32px;margin-bottom:10px">⏳</div>
+    <h3 id="procesando-txt">Procesando, espera…</h3>
+    <p style="font-size:12px;color:var(--text3);margin-top:8px">Esto puede tardar en manuales largos.</p>
+  </div>
+</div>
+
 <canvas id="canvas" style="display:none"></canvas>
 
 <script>
@@ -1120,82 +1141,101 @@ function toggleConvPanel(abrir) {
 }
 
 // ============ MANUALES (Fase 1: códigos de fallo + parámetros) ======
-let manualExtraido = null; // datos propuestos por la IA, pendientes de guardar
+let manualExtraido = null;   // datos propuestos por la IA, pendientes de guardar
+let manualPaginas = null;    // páginas del PDF en curso
+let manualNombre = '';       // nombre del archivo en curso
 
+function mostrarProcesando(txt) {
+  document.getElementById('procesando-txt').textContent = txt || 'Procesando, espera…';
+  document.getElementById('procesando-modal').classList.remove('hidden');
+}
+function ocultarProcesando() {
+  document.getElementById('procesando-modal').classList.add('hidden');
+}
+
+// Trocea un texto largo en fragmentos de ~tamaño, sin cortar palabras a lo bruto.
+function trocearTexto(texto, tam) {
+  const trozos = [];
+  for (let i = 0; i < texto.length; i += tam) trozos.push(texto.slice(i, i + tam));
+  return trozos;
+}
+
+// Paso 1: al elegir archivo, leer páginas y preguntar qué contiene.
 async function importarManual(file) {
   document.getElementById('manual-pdf-input').value = '';
   if (!file) return;
   if (typeof pdfjsLib === 'undefined') { alert('No se pudo cargar el lector de PDF.'); return; }
-  showTyping();
+  mostrarProcesando('Leyendo el PDF…');
   try {
-    const paginas = await extraerPaginasPDF(file);
-    const textoTotal = paginas.join('\n');
-    if (!textoTotal || textoTotal.length < 40) {
-      removeTyping();
+    manualPaginas = await extraerPaginasPDF(file);
+    manualNombre = file.name.replace(/\.pdf$/i, '');
+    ocultarProcesando();
+    const total = manualPaginas.join('\n');
+    if (!total || total.length < 40) {
       alert('No se pudo leer texto del PDF (puede ser un escaneo sin texto).');
       return;
     }
+    document.getElementById('tipo-pdf-modal').classList.remove('hidden');
+  } catch(e) {
+    ocultarProcesando();
+    alert('Error al leer el PDF: ' + e.message);
+  }
+}
 
-    // 1) Identificación (marca/modelo/tipo): del principio del manual.
-    const inicio = textoTotal.slice(0, 8000);
+// Paso 2: procesar según el tipo elegido, en tandas para no cortar listas largas.
+async function procesarManual(tipo) {
+  document.getElementById('tipo-pdf-modal').classList.add('hidden');
+  const textoTotal = manualPaginas.join('\n');
+  const TAM = 45000; // tamaño por tanda
+  const trozos = trocearTexto(textoTotal, TAM);
 
-    // 2) Secciones de códigos de fallo: páginas con estas palabras.
-    const seccionCodigos = seleccionarSecciones(paginas,
-      ['trip', 'fault', 'error code', 'diagnos', 'código de fallo', 'avería', 'fallo', 'alarm'],
-      55000);
+  manualExtraido = { marca:'', modelo:'', tipo:'', nombre: manualNombre, codigos: [], parametros: [] };
 
-    // 3) Secciones de parámetros: páginas con estas palabras.
-    const seccionParams = seleccionarSecciones(paginas,
-      ['parameter', 'parámetro', 'parametro', 'menu 0', 'pr 0', 'default', 'valor por defecto', 'range'],
-      55000);
+  try {
+    // Identificación: del principio, una sola vez.
+    mostrarProcesando('Identificando el equipo…');
+    const ident = await callGemini(`Del inicio de este manual técnico industrial, identifica marca, modelo y tipo de equipo. Responde SOLO JSON: {"marca":"...","modelo":"...","tipo":"..."}. Si algo no aparece, cadena vacía.\n\n${textoTotal.slice(0,8000)}`, null, null, null);
+    try { const d = JSON.parse(ident.replace(/```json|```/g,'').trim()); manualExtraido.marca=d.marca||''; manualExtraido.modelo=d.modelo||''; manualExtraido.tipo=d.tipo||''; } catch(e) {}
 
-    // --- Llamada 1: identificación + códigos ---
-    const promptCodigos = `Del texto de un manual técnico industrial, extrae la identificación del equipo y TODOS los códigos de fallo/error/trip con su descripción, causa y solución.
-Responde SOLO con JSON válido sin markdown:
-{"marca":"...","modelo":"...","tipo":"...","codigos":[{"codigo":"...","descripcion":"...","causa":"...","solucion":"..."}]}
-No inventes: extrae solo lo que aparezca. Si no hay códigos, array vacío.
+    for (let t = 0; t < trozos.length; t++) {
+      const parte = `(parte ${t+1} de ${trozos.length})`;
 
-INICIO DEL MANUAL (para identificación):
-${inicio}
+      if (tipo === 'codigos' || tipo === 'ambos') {
+        mostrarProcesando(`Extrayendo códigos de fallo ${parte}…`);
+        const r = await callGemini(`Extrae de este fragmento de manual TODOS los códigos de fallo/error/trip con descripción, causa y solución. Responde SOLO JSON sin markdown: {"codigos":[{"codigo":"...","descripcion":"...","causa":"...","solucion":"..."}]}. No inventes. Si no hay, array vacío.\n\n${trozos[t]}`, null, null, null);
+        try { const d = JSON.parse(r.replace(/```json|```/g,'').trim()); if (Array.isArray(d.codigos)) manualExtraido.codigos.push(...d.codigos); } catch(e) {}
+      }
 
-SECCIONES DE FALLOS:
-${seccionCodigos || '(no encontradas)'}`;
-
-    const respC = await callGemini(promptCodigos, null, null, null);
-    let dataC = { marca:'', modelo:'', tipo:'', codigos:[] };
-    try { dataC = JSON.parse(respC.replace(/```json|```/g, '').trim()); } catch(e) {}
-
-    // --- Llamada 2: parámetros ---
-    let dataP = { parametros: [] };
-    if (seccionParams) {
-      const promptParams = `Del texto de un manual técnico industrial, extrae TODAS las listas de parámetros con su nombre, rango, valor por defecto y descripción.
-Responde SOLO con JSON válido sin markdown:
-{"parametros":[{"parametro":"...","nombre":"...","rango":"...","defecto":"...","descripcion":"..."}]}
-No inventes: extrae solo lo que aparezca. Si no hay parámetros, array vacío.
-
-SECCIONES DE PARÁMETROS:
-${seccionParams}`;
-      const respP = await callGemini(promptParams, null, null, null);
-      try { dataP = JSON.parse(respP.replace(/```json|```/g, '').trim()); } catch(e) {}
+      if (tipo === 'parametros' || tipo === 'ambos') {
+        mostrarProcesando(`Extrayendo parámetros ${parte}…`);
+        const r = await callGemini(`Extrae de este fragmento de manual TODAS las listas de parámetros con nombre, rango, valor por defecto y descripción. Responde SOLO JSON sin markdown: {"parametros":[{"parametro":"...","nombre":"...","rango":"...","defecto":"...","descripcion":"..."}]}. No inventes. Si no hay, array vacío.\n\n${trozos[t]}`, null, null, null);
+        try { const d = JSON.parse(r.replace(/```json|```/g,'').trim()); if (Array.isArray(d.parametros)) manualExtraido.parametros.push(...d.parametros); } catch(e) {}
+      }
     }
 
-    removeTyping();
+    // Quitar duplicados evidentes (mismo código / mismo parámetro)
+    manualExtraido.codigos = dedupe(manualExtraido.codigos, 'codigo');
+    manualExtraido.parametros = dedupe(manualExtraido.parametros, 'parametro');
 
-    manualExtraido = {
-      marca: dataC.marca || '',
-      modelo: dataC.modelo || '',
-      tipo: dataC.tipo || '',
-      nombre: file.name.replace(/\.pdf$/i, ''),
-      codigos: Array.isArray(dataC.codigos) ? dataC.codigos : [],
-      parametros: Array.isArray(dataP.parametros) ? dataP.parametros : []
-    };
+    ocultarProcesando();
     renderManualModal();
     document.getElementById('manual-modal').classList.remove('hidden');
   } catch(e) {
-    removeTyping();
+    ocultarProcesando();
     alert('Error al procesar el manual: ' + e.message);
   }
 }
+
+function dedupe(arr, campo) {
+  const vistos = new Set();
+  return arr.filter(x => {
+    const k = (x[campo] || '').trim().toLowerCase();
+    if (!k) return true;
+    if (vistos.has(k)) return false;
+    vistos.add(k); return true;
+  });
+}
+
 
 function renderManualModal() {
   const d = manualExtraido;
