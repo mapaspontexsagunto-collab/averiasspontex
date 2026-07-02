@@ -414,8 +414,9 @@
 <!-- Modal añadir máquina -->
 <div class="modal-overlay hidden" id="machine-modal">
   <div class="modal" style="max-width:420px">
-    <h3>⚙️ Nueva máquina</h3>
+    <h3 id="mach-modal-title">⚙️ Nueva máquina</h3>
     <div style="display:flex;flex-direction:column;gap:12px;margin-top:14px">
+      <input type="hidden" id="mach-edit-id" value="">
       <div style="display:flex;flex-direction:column;gap:5px">
         <label style="font-size:12px;color:var(--text2)">Nombre <span style="color:var(--accent)">*</span></label>
         <input type="text" id="mach-name" placeholder="Ej: Fresadora 3, Variador Línea 2...">
@@ -614,9 +615,11 @@ async function updateAveria(id, data) {
 }
 
 async function deleteAveria(id) {
+  // return=representation devuelve las filas borradas; si viene vacío es que
+  // no se borró nada (típicamente por permisos/RLS en Supabase).
   return await sbFetch(`averias?id=eq.${id}`, {
     method: 'DELETE',
-    prefer: 'return=minimal'
+    prefer: 'return=representation'
   });
 }
 
@@ -628,10 +631,18 @@ async function insertMachine(data) {
   });
 }
 
+async function updateMachine(id, data) {
+  return await sbFetch(`machines?id=eq.${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+    prefer: 'return=minimal'
+  });
+}
+
 async function deleteMachine(id) {
   return await sbFetch(`machines?id=eq.${id}`, {
     method: 'DELETE',
-    prefer: 'return=minimal'
+    prefer: 'return=representation'
   });
 }
 
@@ -678,6 +689,7 @@ function renderMachinesList() {
         <div class="machine-meta">${m.modelo || 'Sin modelo'} · ${m.ubicacion || 'Sin ubicación'}</div>
       </div>
       <div class="machine-actions">
+        <button class="del-btn" onclick="editarMaquina('${m.id}')" style="background:var(--surface2);color:var(--text)">Editar</button>
         <button class="del-btn" onclick="removeMachine('${m.id}')">Eliminar</button>
       </div>
     </div>
@@ -687,12 +699,29 @@ function renderMachinesList() {
 async function addMachinePrompt() { openAddMachineModal(); }
 
 function openAddMachineModal() {
+  if (!pedirPassword()) return;
+  document.getElementById('mach-edit-id').value = '';
+  document.getElementById('mach-modal-title').textContent = '⚙️ Nueva máquina';
   document.getElementById('machine-modal').classList.remove('hidden');
   document.getElementById('mach-name').focus();
 }
 
+function editarMaquina(id) {
+  if (!pedirPassword()) return;
+  const m = machinesCache.find(x => String(x.id) === String(id));
+  if (!m) return;
+  document.getElementById('mach-edit-id').value = m.id;
+  document.getElementById('mach-modal-title').textContent = '✏️ Editar máquina';
+  document.getElementById('mach-name').value = m.name || '';
+  document.getElementById('mach-modelo').value = m.modelo || '';
+  document.getElementById('mach-ubicacion').value = m.ubicacion || '';
+  document.getElementById('mach-msg').textContent = '';
+  document.getElementById('machine-modal').classList.remove('hidden');
+}
+
 function closeAddMachineModal() {
   document.getElementById('machine-modal').classList.add('hidden');
+  document.getElementById('mach-edit-id').value = '';
   document.getElementById('mach-name').value = '';
   document.getElementById('mach-modelo').value = '';
   document.getElementById('mach-ubicacion').value = '';
@@ -700,6 +729,7 @@ function closeAddMachineModal() {
 }
 
 async function saveMachineModal() {
+  const id = document.getElementById('mach-edit-id').value;
   const name = document.getElementById('mach-name').value.trim();
   const modelo = document.getElementById('mach-modelo').value.trim();
   const ubicacion = document.getElementById('mach-ubicacion').value.trim();
@@ -707,7 +737,11 @@ async function saveMachineModal() {
   if (!name) { msgEl.textContent = 'El nombre es obligatorio.'; return; }
   try {
     document.getElementById('mach-save-btn').disabled = true;
-    await insertMachine({ name, modelo: modelo || null, ubicacion: ubicacion || null });
+    if (id) {
+      await updateMachine(id, { name, modelo: modelo || null, ubicacion: ubicacion || null });
+    } else {
+      await insertMachine({ name, modelo: modelo || null, ubicacion: ubicacion || null });
+    }
     await loadMachines();
     closeAddMachineModal();
   } catch(e) {
@@ -718,9 +752,14 @@ async function saveMachineModal() {
 }
 
 async function removeMachine(id) {
+  if (!pedirPassword()) return;
   if (!confirm('¿Eliminar esta máquina?')) return;
   try {
-    await deleteMachine(id);
+    const borrado = await deleteMachine(id);
+    if (!borrado || !borrado.length) {
+      alert('No se pudo eliminar. La tabla "machines" no permite borrar con la clave actual. Desactiva RLS en Supabase (SQL: alter table machines disable row level security;).');
+      return;
+    }
     await loadMachines();
   } catch(e) {
     alert('Error: ' + e.message);
@@ -835,7 +874,11 @@ async function eliminarAveria(id) {
   if (!pedirPassword()) return;
   if (!confirm('¿Seguro que quieres eliminar esta avería del histórico? No se puede deshacer.')) return;
   try {
-    await deleteAveria(id);
+    const borrado = await deleteAveria(id);
+    if (!borrado || !borrado.length) {
+      alert('No se pudo eliminar. La tabla "averias" no permite borrar con la clave actual. Desactiva RLS en Supabase (SQL: alter table averias disable row level security;).');
+      return;
+    }
     loadHistorico();
   } catch(e) {
     alert('Error al eliminar: ' + e.message);
