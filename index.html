@@ -1128,48 +1128,66 @@ async function importarManual(file) {
   if (typeof pdfjsLib === 'undefined') { alert('No se pudo cargar el lector de PDF.'); return; }
   showTyping();
   try {
-    const texto = await extraerTextoPDF(file);
-    if (!texto || texto.length < 40) {
+    const paginas = await extraerPaginasPDF(file);
+    const textoTotal = paginas.join('\n');
+    if (!textoTotal || textoTotal.length < 40) {
       removeTyping();
       alert('No se pudo leer texto del PDF (puede ser un escaneo sin texto).');
       return;
     }
-    // Los manuales son largos: limitamos el texto que mandamos a la IA para
-    // la extracción de tablas (los códigos/parámetros suelen estar en secciones
-    // concretas, pero enviamos una porción amplia).
-    const textoLimitado = texto.slice(0, 60000);
 
-    const prompt = `Eres un asistente que extrae información estructurada de manuales técnicos de equipos industriales (variadores, quemadores, PLC, etc.).
+    // 1) Identificación (marca/modelo/tipo): del principio del manual.
+    const inicio = textoTotal.slice(0, 8000);
 
-Del siguiente texto de un manual, extrae:
-1. Identificación del equipo: marca, modelo y tipo.
-2. TODOS los códigos de fallo/error/trip que encuentres, con su descripción, causa y solución.
-3. TODAS las listas de parámetros que encuentres, con nombre, rango, valor por defecto y descripción.
+    // 2) Secciones de códigos de fallo: páginas con estas palabras.
+    const seccionCodigos = seleccionarSecciones(paginas,
+      ['trip', 'fault', 'error code', 'diagnos', 'código de fallo', 'avería', 'fallo', 'alarm'],
+      55000);
 
-Responde SOLO con JSON válido sin markdown, con este formato exacto:
-{"marca":"...","modelo":"...","tipo":"...","codigos":[{"codigo":"...","descripcion":"...","causa":"...","solucion":"..."}],"parametros":[{"parametro":"...","nombre":"...","rango":"...","defecto":"...","descripcion":"..."}]}
+    // 3) Secciones de parámetros: páginas con estas palabras.
+    const seccionParams = seleccionarSecciones(paginas,
+      ['parameter', 'parámetro', 'parametro', 'menu 0', 'pr 0', 'default', 'valor por defecto', 'range'],
+      55000);
 
-- Si un campo no aparece en el manual, pon cadena vacía "".
-- No inventes datos: extrae solo lo que esté en el texto.
-- Si no hay códigos o no hay parámetros, devuelve el array vacío correspondiente.
+    // --- Llamada 1: identificación + códigos ---
+    const promptCodigos = `Del texto de un manual técnico industrial, extrae la identificación del equipo y TODOS los códigos de fallo/error/trip con su descripción, causa y solución.
+Responde SOLO con JSON válido sin markdown:
+{"marca":"...","modelo":"...","tipo":"...","codigos":[{"codigo":"...","descripcion":"...","causa":"...","solucion":"..."}]}
+No inventes: extrae solo lo que aparezca. Si no hay códigos, array vacío.
 
-TEXTO DEL MANUAL:
-${textoLimitado}`;
+INICIO DEL MANUAL (para identificación):
+${inicio}
 
-    const resp = await callGemini(prompt, null, null, null);
+SECCIONES DE FALLOS:
+${seccionCodigos || '(no encontradas)'}`;
+
+    const respC = await callGemini(promptCodigos, null, null, null);
+    let dataC = { marca:'', modelo:'', tipo:'', codigos:[] };
+    try { dataC = JSON.parse(respC.replace(/```json|```/g, '').trim()); } catch(e) {}
+
+    // --- Llamada 2: parámetros ---
+    let dataP = { parametros: [] };
+    if (seccionParams) {
+      const promptParams = `Del texto de un manual técnico industrial, extrae TODAS las listas de parámetros con su nombre, rango, valor por defecto y descripción.
+Responde SOLO con JSON válido sin markdown:
+{"parametros":[{"parametro":"...","nombre":"...","rango":"...","defecto":"...","descripcion":"..."}]}
+No inventes: extrae solo lo que aparezca. Si no hay parámetros, array vacío.
+
+SECCIONES DE PARÁMETROS:
+${seccionParams}`;
+      const respP = await callGemini(promptParams, null, null, null);
+      try { dataP = JSON.parse(respP.replace(/```json|```/g, '').trim()); } catch(e) {}
+    }
+
     removeTyping();
 
-    let data;
-    try { data = JSON.parse(resp.replace(/```json|```/g, '').trim()); }
-    catch(e) { alert('La IA no devolvió un formato válido. Inténtalo de nuevo.'); return; }
-
     manualExtraido = {
-      marca: data.marca || '',
-      modelo: data.modelo || '',
-      tipo: data.tipo || '',
+      marca: dataC.marca || '',
+      modelo: dataC.modelo || '',
+      tipo: dataC.tipo || '',
       nombre: file.name.replace(/\.pdf$/i, ''),
-      codigos: Array.isArray(data.codigos) ? data.codigos : [],
-      parametros: Array.isArray(data.parametros) ? data.parametros : []
+      codigos: Array.isArray(dataC.codigos) ? dataC.codigos : [],
+      parametros: Array.isArray(dataP.parametros) ? dataP.parametros : []
     };
     renderManualModal();
     document.getElementById('manual-modal').classList.remove('hidden');
@@ -1337,6 +1355,33 @@ async function extraerTextoPDF(file) {
     texto += content.items.map(it => it.str).join(' ') + '\n';
   }
   return texto.trim();
+}
+
+// Devuelve un array con el texto de cada página por separado.
+async function extraerPaginasPDF(file) {
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  const paginas = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    paginas.push(content.items.map(it => it.str).join(' '));
+  }
+  return paginas;
+}
+
+// De un manual largo, selecciona el texto de las páginas que hablan de
+// códigos de fallo o parámetros (por palabras clave), hasta un tope de tamaño.
+function seleccionarSecciones(paginas, palabrasClave, topeCaracteres) {
+  let out = '';
+  for (const p of paginas) {
+    const lower = p.toLowerCase();
+    if (palabrasClave.some(k => lower.includes(k))) {
+      out += p + '\n\n';
+      if (out.length >= topeCaracteres) break;
+    }
+  }
+  return out.slice(0, topeCaracteres);
 }
 
 async function importarParte(file) {
